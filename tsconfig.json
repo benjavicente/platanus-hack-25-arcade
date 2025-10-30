@@ -9,7 +9,9 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "types": ["phaser"],
+    "checkJs": true
   },
   "include": ["*.ts"],
   "exclude": ["node_modules"]
