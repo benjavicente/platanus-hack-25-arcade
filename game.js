@@ -619,6 +619,9 @@ class GameOverScreen {
     this.scene = scene;
     this.score = score;
 
+    // Start game over music
+    audioSystem.playGameOverMusic();
+
     // Create dark overlay
     this.graphics = scene.add.graphics();
     this.graphics.fillStyle(0x000000, 0.8);
@@ -702,6 +705,9 @@ class GameScreen {
     });
     this.scoreText.setOrigin(0.5);
     this.enemySpawner = new EnemySpawner();
+
+    // Start game music
+    audioSystem.playGameMusic();
   }
 
   updateSpawning(time) {
@@ -761,8 +767,10 @@ class GameScreen {
       enemy.move(playerPos, timeStep, this);
 
       for (const action of enemy.getActions(playerPos, time)) {
-        if (action instanceof RedBullet) {
+        if (action instanceof Bullet) {
           this.bullets.push(action);
+          // Play bullet fire sound
+          audioSystem.playBulletSound();
         }
       }
 
@@ -783,6 +791,8 @@ class GameScreen {
         this.bullets.splice(i, 1);
       } else if (bullet.collidesWith(this.player)) {
         this.bullets.splice(i, 1);
+        // Play hit sound when player takes damage
+        audioSystem.playHitSound();
         if (this.player.takeDamage(1)) {
           this.endGame();
         }
@@ -793,6 +803,10 @@ class GameScreen {
   processActions(actions, enemyIndex = -1) {
     for (const action of actions) {
       if (action instanceof DeadAction) {
+        // Play capture sound if enemy gave score (was killed)
+        if (action.score > 0) {
+          audioSystem.playCaptureSound();
+        }
         this.player.addScore(action.score);
         this.player.addPower(action.power);
         this.updateScoreDisplay();
@@ -802,14 +816,20 @@ class GameScreen {
         break;
       } else if (action instanceof HealthAction) {
         if (action.healthChange < 0) {
+          // Play hit sound when player takes damage
+          audioSystem.playHitSound();
           if (this.player.takeDamage(-action.healthChange)) {
             this.endGame();
           }
         } else {
-          this.player.hearts = Math.min(
+          const newHearts = Math.min(
             this.player.hearts + action.healthChange,
             MAX_HEARTS
           );
+          if (newHearts > this.player.hearts) {
+            audioSystem.playHeartSound();
+          }
+          this.player.hearts = newHearts;
         }
       }
     }
@@ -818,7 +838,11 @@ class GameScreen {
   flash(time) {
     if (!this.player.tryFlash(time)) return;
 
+    // Play flash sound effect
+    audioSystem.playFlashSound();
+
     const playerPos = { x: this.player.x, y: this.player.y };
+    let enemiesKilled = 0;
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
       if (enemy.distanceTo(playerPos) <= FLASH_RANGE) {
@@ -833,8 +857,13 @@ class GameScreen {
           this.player.addPower(1);
           this.updateScoreDisplay();
           this.enemies.splice(i, 1);
+          enemiesKilled++;
         }
       }
+    }
+    // Play capture sound if any enemies were killed
+    if (enemiesKilled > 0) {
+      audioSystem.playCaptureSound();
     }
   }
 
@@ -935,15 +964,139 @@ function drawHeart(graphics, x, y, size, alpha = 1) {
   graphics.fillPath();
 }
 
+// ========== AUDIO SYSTEM ==========
+class AudioSystem {
+  constructor(scene) {
+    this.scene = scene;
+    this.musicLoop = null;
+  }
+
+  playGameMusic() {
+    this.stopAll();
+    const highNote = 293.66; // D4
+    const lowNote = 220; // A3
+    const pattern = [
+      { note: highNote, duration: 800, delay: 800 }, // 2 beats
+      { note: highNote, duration: 100, delay: 200 }, // 1 beat
+      { note: lowNote, duration: 200, delay: 400 }, // 1 beat
+      { note: lowNote, duration: 200, delay: 400 }, // 1 beat
+      { note: lowNote, duration: 200, delay: 300 }, // 1 beat
+    ];
+    let patternIndex = 0;
+
+    const playNext = () => {
+      const step = pattern[patternIndex];
+      this.playTone(step.note, 0.1, step.duration, "sine");
+      patternIndex = (patternIndex + 1) % pattern.length;
+      this.musicLoop = this.scene.time.addEvent({
+        delay: step.delay,
+        callback: playNext,
+      });
+    };
+
+    playNext();
+  }
+
+  playGameOverMusic() {
+    this.stopAll();
+    // Slower, more somber melody for game over
+    const notes = [294, 262, 220, 196]; // D, C, A, G (descending)
+    let noteIndex = 0;
+
+    this.musicLoop = this.scene.time.addEvent({
+      delay: 600,
+      loop: true,
+      callback: () => {
+        this.playTone(notes[noteIndex % notes.length], 0.1, 200, "sine");
+        noteIndex++;
+      },
+    });
+  }
+
+  playFlashSound() {
+    // Powerful flash sound with frequency sweep
+    this.playTone(800, 0.15, 100, "sawtooth");
+    this.scene.time.delayedCall(50, () => {
+      this.playTone(400, 0.12, 80, "square");
+    });
+  }
+
+  playBulletSound() {
+    // Short, sharp bullet fire sound
+    this.playTone(150, 0.08, 50, "square");
+  }
+
+  playHitSound() {
+    // Player taking damage - harsh downward sweep
+    this.playTone(400, 0.2, 80, "sawtooth");
+    this.scene.time.delayedCall(40, () => {
+      this.playTone(200, 0.15, 60, "square");
+    });
+  }
+
+  playHeartSound() {
+    // Player gaining heart - upward sweep with pleasant tone
+    this.playTone(300, 0.12, 60, "sine");
+    this.scene.time.delayedCall(30, () => {
+      this.playTone(450, 0.1, 70, "sine");
+    });
+    this.scene.time.delayedCall(60, () => {
+      this.playTone(600, 0.08, 80, "triangle");
+    });
+  }
+
+  playCaptureSound() {
+    // Enemy captured - upward sweep with pleasant tone
+    this.playTone(300, 0.12, 60, "sine");
+    this.scene.time.delayedCall(30, () => {
+      this.playTone(450, 0.1, 70, "sine");
+    });
+    this.scene.time.delayedCall(60, () => {
+      this.playTone(600, 0.08, 80, "triangle");
+    });
+  }
+
+  playTone(frequency, volume, duration, waveType = "sine") {
+    const audioContext = this.scene.sound.context;
+    if (!audioContext) return;
+
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.type = waveType;
+    oscillator.frequency.value = frequency;
+
+    gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(
+      0.01,
+      audioContext.currentTime + duration / 1000
+    );
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + duration / 1000);
+  }
+
+  stopAll() {
+    if (this.musicLoop) {
+      this.musicLoop.remove();
+      this.musicLoop = null;
+    }
+  }
+}
+
 // ========== PHASER SCENE ==========
 let currentScreen;
 let keys;
+let audioSystem;
 
 function create() {
-  // Initialize first screen
+  audioSystem = new AudioSystem(this);
+
   currentScreen = new GameScreen(this);
 
-  // Setup input keys
   keys = {
     cursors: this.input.keyboard.createCursorKeys(),
     dashKey: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C),
@@ -953,10 +1106,7 @@ function create() {
 }
 
 function update(time, delta) {
-  // Update current screen and check for screen transition
   const nextScreen = currentScreen.update(time, delta, keys);
-
-  // If update returns a new screen, transition to it
   if (nextScreen) {
     currentScreen.destroy();
     currentScreen = nextScreen;
