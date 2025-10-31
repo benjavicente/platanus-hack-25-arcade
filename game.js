@@ -37,7 +37,7 @@ const PLAYER_SPEED = 200;
 const PLAYER_INVULNERABILITY_TIME = 750;
 
 const FLASH_COST = 4;
-const FLASH_RANGE = 75;
+const FLASH_RANGE = 100;
 const FLASH_DAMAGE = 1;
 
 const MAX_HEARTS = 3;
@@ -1275,7 +1275,7 @@ class GameScreen {
     const newEnemy = this.enemySpawner.getRandomEnemy(this.enemies);
 
     if (!newEnemy) return;
-    this.spawnDelay -= 0.0001;
+    this.spawnDelay = Math.max(0.1, this.spawnDelay - 0.002);
 
     const { x, y } = this.getSpawnPosition();
     this.enemies.push(new newEnemy.enemyClass(x, y, undefined, this));
