@@ -1181,7 +1181,7 @@ class GameOverScreen {
     this.score2Text.setOrigin(0.5);
 
     // Create reset button text
-    this.resetButtonText = scene.add.text(400, 380, "Press R to Restart", {
+    this.resetButtonText = scene.add.text(400, 380, "Press SPACE to Restart", {
       fontSize: "32px",
       fontFamily: "Arial, sans-serif",
       color: "#ffffff",
@@ -1191,8 +1191,8 @@ class GameOverScreen {
   }
 
   update(time, delta, keys) {
-    // Check if player wants to restart
-    if (Phaser.Input.Keyboard.JustDown(keys.resetKey)) {
+    // Check if player wants to start a new game
+    if (Phaser.Input.Keyboard.JustDown(keys.startKey)) {
       return new GameScreen(this.scene);
     }
     return null;
@@ -1740,7 +1740,6 @@ function create() {
       dash: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.V),
     },
     player2: this.input.keyboard.createCursorKeys(),
-    resetKey: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R),
     startKey: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
   };
 
