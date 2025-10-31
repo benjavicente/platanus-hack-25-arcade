@@ -20,11 +20,12 @@ const config = {
 const phaserGame = new Phaser.Game(config);
 
 // Constants
-const DASH_DURATION = 100;
-const DASH_COOLDOWN = 1000;
+const DASH_DURATION = 120;
+const DASH_COOLDOWN = 900;
 const DASH_SPEED_MULTIPLIER = 3;
 
 const PLAYER_SPEED = 200;
+const PLAYER_INVULNERABILITY_TIME = 750;
 
 const FLASH_COST = 4;
 const FLASH_RANGE = 75;
@@ -38,38 +39,67 @@ const RED_RADIUS = 10;
 const RED_SPAWN_INTERVAL = 1500;
 const RED_SPAWN_INCREASE = 50;
 const RED_SHOOT_INTERVAL = 2000;
-const RED_MIN_SHOOT_DISTANCE = 30;
+const RED_MIN_SHOOT_DISTANCE = 40;
+const RED_BULLET_SPEED = 200;
 
 const GREEN_RADIUS = 12;
 const GREEN_SPAWN_INTERVAL = 3000;
 const GREEN_SPAWN_INCREASE = 100;
 const GREEN_ACC_LIMIT = 120;
 const GREEN_VEL_LIMIT = 90;
+const GREEN_REPULSION_STRENGTH = 800;
+const GREEN_REPULSION_RADIUS = 80;
 
 const PINK_SPEED = 50;
 const PINK_RADIUS = 14;
 const PINK_SPAWN_INTERVAL = 4000;
 const PINK_SPAWN_INCREASE = 150;
+const PINK_ACC_LIMIT = 10;
 
-const BULLET_SPEED = 200;
+const YELLOW_SPEED = 50;
+const YELLOW_RADIUS = 10;
+const YELLOW_SPAWN_INTERVAL = 2500;
+const YELLOW_SPAWN_INCREASE = 75;
+const YELLOW_SHOOT_MIN_DISTANCE = 50;
+const YELLOW_SHOOT_MAX_DISTANCE = 80;
+const YELLOW_SHOOT_COOLDOWN = 2000;
+const YELLOW_BULLET_SPEED = 100;
+
+const BLUE_SPEED = 60;
+const BLUE_RADIUS = 12;
+const BLUE_SPAWN_INTERVAL = 5000;
+const BLUE_SPAWN_INCREASE = 200;
+const BLUE_BULLET_SPEED = 150;
+const BLUE_BULLET_RADIUS = 80;
+
 const BULLET_RADIUS = 4;
 
 class EnemySpawner {
   config = [
     {
       enemyClass: RedEnemy,
-      probabilityWeight: 8,
+      probabilityWeight: 100,
       maxAmountOnScreen: 50,
     },
     {
       enemyClass: GreenEnemy,
-      probabilityWeight: 3,
-      maxAmountOnScreen: 10,
+      probabilityWeight: 20,
+      maxAmountOnScreen: 7,
     },
     {
       enemyClass: PinkEnemy,
-      probabilityWeight: 1,
+      probabilityWeight: 15,
       maxAmountOnScreen: 3,
+    },
+    {
+      enemyClass: YellowEnemy,
+      probabilityWeight: 10,
+      maxAmountOnScreen: 3,
+    },
+    {
+      enemyClass: BlueEnemy,
+      probabilityWeight: 5,
+      maxAmountOnScreen: 4,
     },
   ];
 
@@ -96,7 +126,7 @@ class EnemySpawner {
   }
 }
 
-// ========== ACTIONS ==========
+// ========== ACTIONS TO THE PLAYER ==========
 class DeadAction {
   constructor(score, power) {
     this.score = score || 0;
@@ -133,12 +163,74 @@ class Bullet {
   }
 
   render(graphics) {
+    throw new Error("Not implemented");
+  }
+}
+
+class RedBullet extends Bullet {
+  constructor(x, y, vx, vy) {
+    super(x, y, vx, vy);
+    this.radius = BULLET_RADIUS;
+  }
+
+  render(graphics) {
     graphics.fillStyle(0xff4444, 1);
     graphics.fillCircle(this.x, this.y, this.radius);
   }
 }
 
-class RedBullet extends Bullet {}
+class YellowBullet extends Bullet {
+  constructor(x, y, vx, vy) {
+    super(x, y, vx, vy);
+    this.radius = BULLET_RADIUS;
+  }
+
+  render(graphics) {
+    graphics.fillStyle(0xffff00, 1);
+    graphics.fillCircle(this.x, this.y, this.radius);
+  }
+}
+
+class BlueBullet extends Bullet {
+  constructor(x, y, vx, vy, centerX, centerY, maxRadius) {
+    super(x, y, vx, vy);
+    this.radius = BULLET_RADIUS;
+    this.centerX = centerX;
+    this.centerY = centerY;
+    this.maxRadius = maxRadius;
+    this.isStopped = false;
+  }
+
+  update(timeStep) {
+    if (this.isStopped) return;
+
+    const newX = this.x + this.vx * timeStep;
+    const newY = this.y + this.vy * timeStep;
+    const dx = newX - this.centerX;
+    const dy = newY - this.centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance >= this.maxRadius) {
+      // Stop at max radius
+      const angle = Math.atan2(dy, dx);
+      this.x = this.centerX + Math.cos(angle) * this.maxRadius;
+      this.y = this.centerY + Math.sin(angle) * this.maxRadius;
+      this.vx = 0;
+      this.vy = 0;
+      this.isStopped = true;
+    } else {
+      this.x = newX;
+      this.y = newY;
+    }
+  }
+
+  render(graphics) {
+    graphics.fillStyle(0x4444ff, 1);
+    graphics.fillCircle(this.x, this.y, this.radius);
+    graphics.lineStyle(1, 0x6666ff, 1);
+    graphics.strokeCircle(this.x, this.y, this.radius);
+  }
+}
 
 function isOffScreen(obj) {
   return obj.x < -100 || obj.x > 900 || obj.y < -100 || obj.y > 700;
@@ -146,20 +238,20 @@ function isOffScreen(obj) {
 
 // ========== ENEMY ==========
 class Enemy {
-  constructor(x, y, radius) {
+  constructor(x, y, radius, game) {
     this.x = x;
     this.y = y;
     this.radius = radius;
     this.triangleHearts = 1;
+    this.game = game;
   }
 
   move(playerPos, timeStep, speed) {
     throw new Error("Not implemented");
   }
 
-  takeDamage(damage) {
-    this.triangleHearts -= damage;
-    return this.triangleHearts <= 0;
+  onFlashed() {
+    throw new Error("Not implemented");
   }
 
   distanceTo(pos) {
@@ -174,8 +266,8 @@ class Enemy {
 }
 
 class RedEnemy extends Enemy {
-  constructor(x, y, collisionRadius = RED_RADIUS) {
-    super(x, y, collisionRadius);
+  constructor(x, y, r = RED_RADIUS, game) {
+    super(x, y, r, game);
     this.lastShotTime = 0;
   }
 
@@ -200,8 +292,8 @@ class RedEnemy extends Enemy {
     ) {
       const dx = playerPos.x - this.x;
       const dy = playerPos.y - this.y;
-      const vx = (dx / distance) * BULLET_SPEED;
-      const vy = (dy / distance) * BULLET_SPEED;
+      const vx = (dx / distance) * RED_BULLET_SPEED;
+      const vy = (dy / distance) * RED_BULLET_SPEED;
       actions.push(new RedBullet(this.x, this.y, vx, vy));
       this.lastShotTime = currentTime;
     }
@@ -213,6 +305,14 @@ class RedEnemy extends Enemy {
     return [new DeadAction(100, 1)];
   }
 
+  onFlashed() {
+    this.triangleHearts -= FLASH_DAMAGE;
+    if (this.triangleHearts <= 0) {
+      return [new DeadAction(100, 0)];
+    }
+    return [];
+  }
+
   render(graphics) {
     graphics.fillStyle(0xff0000, 1);
     graphics.fillCircle(this.x, this.y, this.radius);
@@ -222,8 +322,8 @@ class RedEnemy extends Enemy {
 }
 
 class GreenEnemy extends Enemy {
-  constructor(x, y, collisionRadius = GREEN_RADIUS) {
-    super(x, y, collisionRadius);
+  constructor(x, y, r = GREEN_RADIUS, game) {
+    super(x, y, r, game);
     this.triangleHearts = 2;
     this.vx = 0;
     this.vy = 0;
@@ -233,7 +333,7 @@ class GreenEnemy extends Enemy {
 
   // Green enemy now uses acceleration and velocity capped to limits
 
-  move(playerPos, timeStep) {
+  move(playerPos, timeStep, game) {
     // Direction to player
     const dx = playerPos.x - this.x;
     const dy = playerPos.y - this.y;
@@ -244,6 +344,23 @@ class GreenEnemy extends Enemy {
     // Target acceleration towards the player
     let ax = (dx / dist) * GREEN_ACC_LIMIT;
     let ay = (dy / dist) * GREEN_ACC_LIMIT;
+
+    // Add repulsion from other green enemies
+    for (let i = 0; i < game.enemies.length; i++) {
+      const other = game.enemies[i];
+      if (other !== this && other instanceof GreenEnemy) {
+        const odx = this.x - other.x;
+        const ody = this.y - other.y;
+        const odist = Math.sqrt(odx * odx + ody * ody);
+
+        if (odist < GREEN_REPULSION_RADIUS && odist > 0) {
+          // Repulsion force inversely proportional to distance
+          const repulsionForce = GREEN_REPULSION_STRENGTH / (odist * odist);
+          ax += (odx / odist) * repulsionForce;
+          ay += (ody / odist) * repulsionForce;
+        }
+      }
+    }
 
     // Update acceleration (can apply smoothing here if desired)
     this.ax = ax;
@@ -266,6 +383,14 @@ class GreenEnemy extends Enemy {
   }
 
   getActions() {
+    return [];
+  }
+
+  onFlashed() {
+    this.triangleHearts -= FLASH_DAMAGE;
+    if (this.triangleHearts <= 0) {
+      return [new DeadAction(150, 0)];
+    }
     return [];
   }
 
@@ -305,8 +430,8 @@ class GreenEnemy extends Enemy {
 }
 
 class PinkEnemy extends Enemy {
-  constructor(x, y, collisionRadius = PINK_RADIUS) {
-    super(x, y, collisionRadius);
+  constructor(x, y, r = PINK_RADIUS, game) {
+    super(x, y, r, game);
     this.hasShield = true;
     this.vx = 0;
     this.vy = 0;
@@ -319,28 +444,41 @@ class PinkEnemy extends Enemy {
     this.ax = 0;
     this.ay = 0;
 
-    // Get gravitational pull from other enemies
+    // Get gravitational pull from closest 5 enemies
     let enemyPullX = 0;
     let enemyPullY = 0;
     let enemyCount = 0;
 
+    // Calculate distances to all enemies with a player offset
+    const enemiesWithDistance = [];
     for (const enemy of game.enemies) {
       if (enemy === this) continue;
 
-      const dx = enemy.x - this.x;
-      const dy = enemy.y - this.y;
+      const enemyXDistanceToPlayer = (enemy.x - playerPos.x) / 4;
+      const enemyYDistanceToPlayer = (enemy.y - playerPos.y) / 4;
+      const dx = enemy.x + enemyXDistanceToPlayer - this.x;
+      const dy = enemy.y + enemyYDistanceToPlayer - this.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (distance > 0) {
-        if (enemy instanceof PinkEnemy || distance < 50) {
-          enemyPullX -= dx / distance;
-          enemyPullY -= dy / distance;
-          enemyCount--;
-        } else {
-          enemyPullX += dx / distance;
-          enemyPullY += dy / distance;
-          enemyCount++;
-        }
+        enemiesWithDistance.push({ enemy, distance, dx, dy });
+      }
+    }
+
+    // Sort by distance and take closest 5
+    enemiesWithDistance.sort((a, b) => a.distance - b.distance);
+    const closestEnemies = enemiesWithDistance.slice(0, 3);
+
+    // Calculate gravitational pull from closest 5 enemies
+    for (const { enemy, distance, dx, dy } of closestEnemies) {
+      if (enemy instanceof PinkEnemy || distance < 50) {
+        enemyPullX -= dx / distance;
+        enemyPullY -= dy / distance;
+        enemyCount += 0.5;
+      } else {
+        enemyPullX += dx / distance;
+        enemyPullY += dy / distance;
+        enemyCount++;
       }
     }
 
@@ -367,15 +505,21 @@ class PinkEnemy extends Enemy {
 
     // Offset gravitational pull by moving away from player
     // This keeps the pink enemy behind enemy lines
-    const avoidPlayerStrength = 0.3;
+    const avoidPlayerStrength = 0.4;
 
-    this.ax = 2 * enemyPullX - normalizedToPlayerX * avoidPlayerStrength;
-    this.ay = 2 * enemyPullY - normalizedToPlayerY * avoidPlayerStrength;
+    this.ax = Math.min(
+      2 * enemyPullX - normalizedToPlayerX * avoidPlayerStrength,
+      PINK_ACC_LIMIT
+    );
+    this.ay = Math.min(
+      2 * enemyPullY - normalizedToPlayerY * avoidPlayerStrength,
+      PINK_ACC_LIMIT
+    );
 
     // Apply acceleration to velocity with stronger multiplier
     const accelerationStrength = 300;
-    this.vx += this.ax * accelerationStrength * timeStep;
-    this.vy += this.ay * accelerationStrength * timeStep;
+    (this.vx += this.ax * accelerationStrength * timeStep),
+      (this.vy += this.ay * accelerationStrength * timeStep);
 
     // Apply damping to velocity for smooth movement
     const damping = 0.85;
@@ -391,12 +535,12 @@ class PinkEnemy extends Enemy {
     return [];
   }
 
-  takeDamage(damage) {
+  onFlashed() {
     if (this.hasShield) {
       this.hasShield = false;
-      return false;
+      return [];
     } else {
-      return true;
+      return [new DeadAction(200, 0)];
     }
   }
 
@@ -438,6 +582,184 @@ class PinkEnemy extends Enemy {
   }
 }
 
+class YellowEnemy extends Enemy {
+  constructor(x, y, r = YELLOW_RADIUS, game) {
+    super(x, y, r, game);
+    this.lastShotTime = 0;
+    this.vx = Math.sin(Math.random() * 2 * Math.PI) * YELLOW_SPEED;
+    this.vy = Math.cos(Math.random() * 2 * Math.PI) * YELLOW_SPEED;
+  }
+
+  move(playerPos, timeStep) {
+    // change the direction based on the player position, taking the vector
+    // to the closest player, and the vector of the current position
+    // (both normalized), getting the 0.7*playerVector + 0.3*currentVector
+    // vector, and then normalizing the result and multiplying by YELLOW_SPEED
+    const playerVector = {
+      x: playerPos.x - this.x,
+      y: playerPos.y - this.y,
+    };
+    const currentVector = {
+      x: this.vx,
+      y: this.vy,
+    };
+    const resultVector = {
+      x: 0.7 * playerVector.x + 0.3 * currentVector.x,
+      y: 0.7 * playerVector.y + 0.3 * currentVector.y,
+    };
+    const resultVectorLength = Math.sqrt(
+      resultVector.x * resultVector.x + resultVector.y * resultVector.y
+    );
+    this.vx = (resultVector.x / resultVectorLength) * YELLOW_SPEED;
+    this.vy = (resultVector.y / resultVectorLength) * YELLOW_SPEED;
+    this.x += this.vx * timeStep;
+    this.y += this.vy * timeStep;
+  }
+
+  getActions(playerPos, currentTime) {
+    const actions = [];
+    const distance = this.distanceTo(playerPos);
+
+    if (
+      distance >= YELLOW_SHOOT_MIN_DISTANCE &&
+      distance <= YELLOW_SHOOT_MAX_DISTANCE &&
+      currentTime - this.lastShotTime >= YELLOW_SHOOT_COOLDOWN
+    ) {
+      const numBullets = 20;
+      for (let i = 0; i < numBullets; i++) {
+        const angle = (i / numBullets) * Math.PI * 2;
+        const vx = Math.cos(angle) * YELLOW_BULLET_SPEED + this.vx;
+        const vy = Math.sin(angle) * YELLOW_BULLET_SPEED + this.vy;
+        actions.push(new YellowBullet(this.x, this.y, vx, vy));
+      }
+      this.lastShotTime = currentTime;
+    }
+
+    return actions;
+  }
+
+  onCollision() {
+    return [new DeadAction(500, 4)];
+  }
+
+  onFlashed() {
+    this.triangleHearts -= FLASH_DAMAGE;
+    if (this.triangleHearts <= 0) {
+      return [new DeadAction(500, 0)];
+    }
+    return [];
+  }
+
+  render(graphics) {
+    graphics.fillStyle(0xffff00, 1);
+    graphics.fillCircle(this.x, this.y, this.radius);
+    graphics.lineStyle(2, 0xcccc00, 1);
+    graphics.strokeCircle(this.x, this.y, this.radius);
+  }
+}
+
+class BlueEnemy extends Enemy {
+  constructor(x, y, r = BLUE_RADIUS, game) {
+    super(x, y, r, game);
+    this.hasShield = true;
+    this.targetX = game.playArea.x + game.playArea.width * Math.random();
+    this.targetY = game.playArea.y + game.playArea.height * Math.random();
+    this.hasReachedTarget = false;
+    this.hasShot = false;
+  }
+
+  move(playerPos, timeStep, game) {
+    if (!this.hasReachedTarget) {
+      const dx = this.targetX - this.x;
+      const dy = this.targetY - this.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < 5) {
+        this.hasReachedTarget = true;
+        this.x = this.targetX;
+        this.y = this.targetY;
+      } else if (distance > 0) {
+        this.x += (dx / distance) * BLUE_SPEED * timeStep;
+        this.y += (dy / distance) * BLUE_SPEED * timeStep;
+      }
+    }
+  }
+
+  getActions(playerPos, currentTime) {
+    const actions = [];
+
+    if (this.hasReachedTarget && !this.hasShot) {
+      const numBullets = 8;
+      for (let i = 0; i < numBullets; i++) {
+        const angle = (i / numBullets) * Math.PI * 2;
+        const vx = Math.cos(angle) * BLUE_BULLET_SPEED;
+        const vy = Math.sin(angle) * BLUE_BULLET_SPEED;
+        actions.push(
+          new BlueBullet(
+            this.x,
+            this.y,
+            vx,
+            vy,
+            this.x,
+            this.y,
+            BLUE_BULLET_RADIUS
+          )
+        );
+      }
+      this.hasShot = true;
+    }
+
+    return actions;
+  }
+
+  onFlashed() {
+    if (this.hasShield) {
+      this.hasShield = false;
+      return [];
+    } else {
+      return [new DeadAction(300, 0)];
+    }
+  }
+
+  onCollision() {
+    if (this.hasShield) {
+      return [new HealthAction(-1), new DeadAction(0, 0)];
+    } else {
+      return [new DeadAction(0, MAX_POWER)];
+    }
+  }
+
+  render(graphics) {
+    const sqrt3 = 0.8660254;
+    const triangleSize = this.radius * 0.8;
+
+    // Draw blue circle outline
+    graphics.lineStyle(2, 0x4444ff, this.hasShield ? 1 : 0.2);
+    graphics.strokeCircle(this.x, this.y, this.radius);
+
+    // Draw triangle outline (shield) if hasShield
+    if (this.hasShield) {
+      graphics.lineStyle(2, 0x4444ff, 1);
+      graphics.beginPath();
+      graphics.moveTo(this.x, this.y - triangleSize);
+      graphics.lineTo(
+        this.x - triangleSize * sqrt3,
+        this.y + triangleSize * 0.5
+      );
+      graphics.lineTo(
+        this.x + triangleSize * sqrt3,
+        this.y + triangleSize * 0.5
+      );
+      graphics.closePath();
+      graphics.strokePath();
+    }
+
+    // Draw blue fill
+    graphics.fillStyle(0x4444ff, this.hasShield ? 0.6 : 0.3);
+    graphics.fillCircle(this.x, this.y, this.radius * 0.7);
+  }
+}
+
 // ========== PLAYER ==========
 class Player {
   constructor(x, y, index) {
@@ -453,6 +775,7 @@ class Player {
     this.dashStartTime = 0;
     this.dashEndTime = 0;
     this.lastDirection = { x: 0, y: 0 };
+    this.invulnerableUntil = 0;
   }
 
   updateMovement(keys, time, timeStep, playArea) {
@@ -530,8 +853,13 @@ class Player {
     this.power = Math.min(this.power + amount, MAX_POWER);
   }
 
-  takeDamage(damage) {
+  isInvulnerable(time) {
+    return time < this.invulnerableUntil;
+  }
+
+  takeDamage(damage, currentTime) {
     this.hearts -= damage;
+    this.invulnerableUntil = currentTime + PLAYER_INVULNERABILITY_TIME; // 1 second invulnerability
     return this.hearts <= 0;
   }
 
@@ -606,6 +934,77 @@ class Player {
       heartSize,
       this.hearts >= 1 ? 1 : 0.2
     );
+  }
+}
+
+// ========== TITLE SCREEN ==========
+class TitleScreen {
+  constructor(scene) {
+    this.scene = scene;
+
+    audioSystem.playTitleMusic();
+
+    this.background = scene.add.rectangle(400, 300, 800, 600, 0x050505);
+
+    this.frame = scene.add.graphics();
+    this.frame.lineStyle(6, 0x00ffff, 0.4);
+    this.frame.strokeRect(140, 120, 520, 360);
+
+    this.titleText = scene.add.text(400, 280, "close corners", {
+      fontSize: "72px",
+      fontFamily: "Arial, sans-serif",
+      color: "#ffffff",
+      align: "center",
+      fontStyle: "bold",
+    });
+    this.titleText.setOrigin(0.5);
+
+    this.promptText = scene.add.text(400, 380, "Press SPACE to begin", {
+      fontSize: "28px",
+      fontFamily: "Arial, sans-serif",
+      color: "#ffffff",
+      align: "center",
+    });
+    this.promptText.setOrigin(0.5);
+
+    this.controlsText = scene.add.text(
+      400,
+      450,
+      "P1: WASD + V dash + C flash    P2: Arrows + K dash + L flash",
+      {
+        fontSize: "18px",
+        fontFamily: "Arial, sans-serif",
+        color: "#cccccc",
+        align: "center",
+        wordWrap: { width: 540 },
+      }
+    );
+    this.controlsText.setOrigin(0.5);
+
+    this.promptTween = scene.tweens.add({
+      targets: this.promptText,
+      alpha: { from: 0.2, to: 1 },
+      duration: 900,
+      ease: "Sine.easeInOut",
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
+  update(time, delta, keys) {
+    if (Phaser.Input.Keyboard.JustDown(keys.startKey)) {
+      return new GameScreen(this.scene);
+    }
+    return null;
+  }
+
+  destroy() {
+    if (this.promptTween) this.promptTween.stop();
+    if (this.background) this.background.destroy();
+    if (this.frame) this.frame.destroy();
+    if (this.titleText) this.titleText.destroy();
+    if (this.promptText) this.promptText.destroy();
+    if (this.controlsText) this.controlsText.destroy();
   }
 }
 
@@ -751,9 +1150,10 @@ class GameScreen {
     const newEnemy = this.enemySpawner.getRandomEnemy(this.enemies);
 
     if (!newEnemy) return;
+    this.spawnDelay -= 0.0001;
 
     const { x, y } = this.getSpawnPosition();
-    this.enemies.push(new newEnemy.enemyClass(x, y));
+    this.enemies.push(new newEnemy.enemyClass(x, y, undefined, this));
     this.lastSpawnTime = elapsed;
   }
 
@@ -830,14 +1230,14 @@ class GameScreen {
       for (const player of this.players) {
         if (enemy.collidesWith(player) && player.hearts > 0) {
           const collisionActions = enemy.onCollision();
-          this.processActions(collisionActions, player, i);
+          this.processActions(collisionActions, player, i, time);
           break; // Only process collision with one player
         }
       }
     }
   }
 
-  updateBullets(timeStep) {
+  updateBullets(timeStep, time) {
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const bullet = this.bullets[i];
       bullet.update(timeStep);
@@ -848,11 +1248,15 @@ class GameScreen {
         // Check collision with all players
         let hitPlayer = false;
         for (const player of this.players) {
-          if (bullet.collidesWith(player) && player.hearts > 0) {
+          if (
+            bullet.collidesWith(player) &&
+            player.hearts > 0 &&
+            !player.isInvulnerable(time)
+          ) {
             this.bullets.splice(i, 1);
             // Play hit sound when player takes damage
             audioSystem.playHitSound();
-            player.takeDamage(1);
+            player.takeDamage(1, time);
             this.checkGameOver();
             hitPlayer = true;
             break;
@@ -862,7 +1266,7 @@ class GameScreen {
     }
   }
 
-  processActions(actions, player, enemyIndex = -1) {
+  processActions(actions, player, enemyIndex = -1, time = 0) {
     for (const action of actions) {
       if (action instanceof DeadAction) {
         // Play capture sound if enemy gave score (was killed)
@@ -878,10 +1282,13 @@ class GameScreen {
         break;
       } else if (action instanceof HealthAction) {
         if (action.healthChange < 0) {
-          // Play hit sound when player takes damage
-          audioSystem.playHitSound();
-          player.takeDamage(-action.healthChange);
-          this.checkGameOver();
+          // Skip damage if player is invulnerable
+          if (!player.isInvulnerable(time)) {
+            // Play hit sound when player takes damage
+            audioSystem.playHitSound();
+            player.takeDamage(-action.healthChange, time);
+            this.checkGameOver();
+          }
         } else {
           const newHearts = Math.min(
             player.hearts + action.healthChange,
@@ -903,23 +1310,24 @@ class GameScreen {
     audioSystem.playFlashSound();
 
     const playerPos = { x: player.x, y: player.y };
+    const rangeSq = FLASH_RANGE * FLASH_RANGE;
     let enemiesKilled = 0;
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
       if (enemy.distanceTo(playerPos) <= FLASH_RANGE) {
-        if (enemy.takeDamage(FLASH_DAMAGE)) {
-          const score =
-            enemy instanceof RedEnemy
-              ? 100
-              : enemy instanceof GreenEnemy
-              ? 150
-              : 200;
-          player.addScore(score);
-          player.addPower(1);
-          this.updateScoreDisplay();
-          this.enemies.splice(i, 1);
+        const actions = enemy.onFlashed();
+        if (actions.length > 0) {
+          this.processActions(actions, player, i);
           enemiesKilled++;
         }
+      }
+    }
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      const bullet = this.bullets[i];
+      const dx = bullet.x - player.x;
+      const dy = bullet.y - player.y;
+      if (dx * dx + dy * dy <= rangeSq) {
+        this.bullets.splice(i, 1);
       }
     }
     // Play capture sound if any enemies were killed
@@ -994,7 +1402,7 @@ class GameScreen {
       // Update game logic
       this.updateSpawning(time);
       this.updateEnemies(time, timeStep);
-      this.updateBullets(timeStep);
+      this.updateBullets(timeStep, time);
     }
 
     this.render(time);
@@ -1061,6 +1469,22 @@ class AudioSystem {
   constructor(scene) {
     this.scene = scene;
     this.musicLoop = null;
+  }
+
+  playTitleMusic() {
+    this.stopAll();
+    const notes = [196, 220, 247, 262];
+    let index = 0;
+
+    this.musicLoop = this.scene.time.addEvent({
+      delay: 500,
+      loop: true,
+      callback: () => {
+        const note = notes[index % notes.length];
+        index++;
+        this.playTone(note, 0.12, 180, "triangle");
+      },
+    });
   }
 
   playGameMusic() {
@@ -1187,7 +1611,7 @@ let audioSystem;
 function create() {
   audioSystem = new AudioSystem(this);
 
-  currentScreen = new GameScreen(this);
+  currentScreen = new TitleScreen(this);
 
   keys = {
     player1: {
@@ -1200,6 +1624,7 @@ function create() {
     },
     player2: this.input.keyboard.createCursorKeys(),
     resetKey: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R),
+    startKey: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
   };
 
   // Add dash and flash keys for player 2
