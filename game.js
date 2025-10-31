@@ -83,42 +83,63 @@ class EnemySpawner {
     },
     {
       enemyClass: GreenEnemy,
-      probabilityWeight: 20,
+      probabilityWeight: 30,
       maxAmountOnScreen: 7,
     },
     {
       enemyClass: PinkEnemy,
-      probabilityWeight: 15,
+      probabilityWeight: 20,
       maxAmountOnScreen: 3,
     },
     {
       enemyClass: YellowEnemy,
-      probabilityWeight: 10,
+      probabilityWeight: 12,
       maxAmountOnScreen: 3,
     },
     {
       enemyClass: BlueEnemy,
-      probabilityWeight: 5,
+      probabilityWeight: 8,
       maxAmountOnScreen: 4,
     },
   ];
 
   getRandomEnemy(currentEnemies) {
-    const totalWeight = this.config
-      .filter(
-        (enemy) =>
-          enemy.maxAmountOnScreen >
-          currentEnemies.filter((e) => e instanceof enemy.enemyClass).length
-      )
-      .reduce((acc, enemy) => acc + enemy.probabilityWeight, 0);
+    const ajustedHeights = this.config
+      .map((enemy) => ({
+        ...enemy,
+        count: currentEnemies.filter((e) => e instanceof enemy.enemyClass)
+          .length,
+      }))
+      .filter((enemy) => enemy.maxAmountOnScreen > enemy.count)
+      .map((enemy) => ({
+        ...enemy,
+        probabilityWeight:
+          enemy.probabilityWeight *
+          Math.sqrt(enemy.maxAmountOnScreen - enemy.count),
+      }));
+
+    if (ajustedHeights.length === 0) return null;
+    const totalWeight = ajustedHeights.reduce(
+      (acc, enemy) => acc + enemy.probabilityWeight,
+      0
+    );
 
     if (totalWeight === 0) return null;
 
     const randomWeight = Math.random() * totalWeight;
     let cumulativeWeight = 0;
-    for (const enemy of this.config) {
+    for (const enemy of ajustedHeights) {
       cumulativeWeight += enemy.probabilityWeight;
       if (randomWeight < cumulativeWeight) {
+        // decrease by 1% the prob of the chosen enremy type
+        const enemyType = this.config.find(
+          (e) => e.enemyClass === enemy.enemyClass
+        );
+        if (enemyType)
+          enemyType.probabilityWeight = Math.max(
+            1,
+            enemyType.probabilityWeight * 0.99
+          );
         return enemy;
       }
     }
