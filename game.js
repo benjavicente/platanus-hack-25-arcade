@@ -1,10 +1,16 @@
 // @ts-check
 
+const WIDTH = 800;
+const HEIGHT = 600;
+const PADDING_X = 100;
+const PADDING_Y = 75;
+const BACKGROUND_COLOR = "#000000";
+
 const config = {
   type: Phaser.AUTO,
-  width: 800,
-  height: 600,
-  backgroundColor: "#000000",
+  width: WIDTH,
+  height: HEIGHT,
+  backgroundColor: BACKGROUND_COLOR,
   pixelArt: false,
   antialias: true,
   render: {
@@ -18,6 +24,9 @@ const config = {
 };
 
 const phaserGame = new Phaser.Game(config);
+
+const PLAYER1_COLOR = 0x00ffff;
+const PLAYER2_COLOR = 0xffaa00;
 
 // Constants
 const DASH_DURATION = 120;
@@ -73,6 +82,83 @@ const BLUE_BULLET_SPEED = 150;
 const BLUE_BULLET_RADIUS = 80;
 
 const BULLET_RADIUS = 4;
+
+const CRT_FRAGMENT_SHADER = `
+precision mediump float;
+
+uniform sampler2D uMainSampler;
+uniform float time;
+uniform vec2 resolution;
+varying vec2 outTexCoord;
+
+float rand(vec2 co) {
+  return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+void main() {
+  vec2 uv = outTexCoord;
+  vec2 centered = uv * 2.0 - 1.0;
+  float dist = dot(centered, centered);
+
+  // Barrel distortion
+  centered *= 1.0 + dist * 0.08;
+  uv = centered * 0.5 + 0.5;
+
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
+
+  vec3 color = texture2D(uMainSampler, uv).rgb;
+
+  // Scanlines
+  float scan = sin((uv.y + time * 0.5) * resolution.y * 1.5) * 0.08;
+  color -= scan;
+
+  // Shadow mask
+  float mask = sin(uv.x * resolution.x * 0.75) * 0.04;
+  color += mask;
+
+  // Flicker noise
+  float noise = rand(vec2(time * 10.0, uv.y)) * 0.04;
+  color += noise;
+
+  // Vignette
+  float vignette = 1.0 - dist * 0.35;
+  color *= vignette;
+
+  color = clamp(color, 0.0, 1.0);
+  gl_FragColor = vec4(color, 1.0);
+}
+`;
+
+class CRTPipeline extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline {
+  constructor(game) {
+    super({
+      game,
+      name: "crtPipeline",
+      fragShader: CRT_FRAGMENT_SHADER,
+    });
+    this._time = 0;
+  }
+
+  onPreRender() {
+    this._time += this.game.loop.delta / 1000;
+    this.set1f("time", this._time);
+    const scale = this.game.scale;
+    const width = Number(
+      scale && typeof scale.width === "number"
+        ? scale.width
+        : this.game.config.width
+    );
+    const height = Number(
+      scale && typeof scale.height === "number"
+        ? scale.height
+        : this.game.config.height
+    );
+    this.set2f("resolution", width, height);
+  }
+}
 
 class EnemySpawner {
   config = [
@@ -275,9 +361,10 @@ class Enemy {
     throw new Error("Not implemented");
   }
 
-  distanceTo(pos) {
-    const dx = pos.x - this.x;
-    const dy = pos.y - this.y;
+  /** @param {Player} player */
+  distanceTo(player) {
+    const dx = player.x - this.x;
+    const dy = player.y - this.y;
     return Math.sqrt(dx * dx + dy * dy);
   }
 
@@ -303,16 +390,17 @@ class RedEnemy extends Enemy {
     }
   }
 
-  getActions(playerPos, currentTime) {
+  /** @param {Player} player; @param {number} currentTime */
+  getActions(player, currentTime) {
     const actions = [];
-    const distance = this.distanceTo(playerPos);
+    const distance = this.distanceTo(player);
 
     if (
       distance >= RED_MIN_SHOOT_DISTANCE &&
       currentTime - this.lastShotTime >= RED_SHOOT_INTERVAL
     ) {
-      const dx = playerPos.x - this.x;
-      const dy = playerPos.y - this.y;
+      const dx = player.x - this.x;
+      const dy = player.y - this.y;
       const vx = (dx / distance) * RED_BULLET_SPEED;
       const vy = (dy / distance) * RED_BULLET_SPEED;
       actions.push(new RedBullet(this.x, this.y, vx, vy));
@@ -637,9 +725,10 @@ class YellowEnemy extends Enemy {
     this.y += this.vy * timeStep;
   }
 
-  getActions(playerPos, currentTime) {
+  /** @param {Player} player; @param {number} currentTime */
+  getActions(player, currentTime) {
     const actions = [];
-    const distance = this.distanceTo(playerPos);
+    const distance = this.distanceTo(player);
 
     if (
       distance >= YELLOW_SHOOT_MIN_DISTANCE &&
@@ -683,8 +772,10 @@ class BlueEnemy extends Enemy {
   constructor(x, y, r = BLUE_RADIUS, game) {
     super(x, y, r, game);
     this.hasShield = true;
-    this.targetX = game.playArea.x + game.playArea.width * Math.random();
-    this.targetY = game.playArea.y + game.playArea.height * Math.random();
+    this.targetX =
+      game.playArea.x + game.playArea.width * (0.2 + Math.random() * 0.8);
+    this.targetY =
+      game.playArea.y + game.playArea.height * (0.2 + Math.random() * 0.8);
     this.hasReachedTarget = false;
     this.hasShot = false;
   }
@@ -706,7 +797,8 @@ class BlueEnemy extends Enemy {
     }
   }
 
-  getActions(playerPos, currentTime) {
+  /** @param {Player} player; @param {number} currentTime */
+  getActions(player, currentTime) {
     const actions = [];
 
     if (this.hasReachedTarget && !this.hasShot) {
@@ -892,7 +984,7 @@ class Player {
     const borderAlpha = this.isDashing || isOnCooldown ? 0.4 : 1;
 
     // Different colors for each player
-    const playerColor = this.index === 1 ? 0x00ffff : 0xffaa00;
+    const playerColor = this.index === 1 ? PLAYER1_COLOR : PLAYER2_COLOR;
 
     // Flash Range
     graphics.lineStyle(2, 0x00ff00, 0.1);
@@ -965,7 +1057,13 @@ class TitleScreen {
 
     audioSystem.playTitleMusic();
 
-    this.background = scene.add.rectangle(400, 300, 800, 600, 0x050505);
+    this.background = scene.add.rectangle(
+      400,
+      300,
+      WIDTH,
+      HEIGHT,
+      BACKGROUND_COLOR
+    );
 
     this.frame = scene.add.graphics();
     this.frame.lineStyle(6, 0x00ffff, 0.4);
@@ -988,19 +1086,29 @@ class TitleScreen {
     });
     this.promptText.setOrigin(0.5);
 
-    this.controlsText = scene.add.text(
-      400,
-      450,
-      "P1: WASD + V dash + C flash    P2: Arrows + K dash + L flash",
+    this.controlsTextP1 = scene.add.text(
+      270,
+      465,
+      "P1: WASD + V dash + C flash",
       {
         fontSize: "18px",
         fontFamily: "Arial, sans-serif",
-        color: "#cccccc",
-        align: "center",
-        wordWrap: { width: 540 },
+        color: `#${PLAYER1_COLOR.toString(16).padStart(6, "0")}`,
       }
     );
-    this.controlsText.setOrigin(0.5);
+    this.controlsTextP1.setOrigin(0.5);
+
+    this.controlsTextP2 = scene.add.text(
+      530,
+      465,
+      "P2: Arrows + K dash + L flash",
+      {
+        fontSize: "18px",
+        fontFamily: "Arial, sans-serif",
+        color: `#${PLAYER2_COLOR.toString(16).padStart(6, "0")}`,
+      }
+    );
+    this.controlsTextP2.setOrigin(0.5);
 
     this.promptTween = scene.tweens.add({
       targets: this.promptText,
@@ -1020,12 +1128,13 @@ class TitleScreen {
   }
 
   destroy() {
-    if (this.promptTween) this.promptTween.stop();
-    if (this.background) this.background.destroy();
-    if (this.frame) this.frame.destroy();
-    if (this.titleText) this.titleText.destroy();
-    if (this.promptText) this.promptText.destroy();
-    if (this.controlsText) this.controlsText.destroy();
+    this.promptTween.stop();
+    this.background.destroy();
+    this.frame.destroy();
+    this.titleText.destroy();
+    this.promptText.destroy();
+    this.controlsTextP1.destroy();
+    this.controlsTextP2.destroy();
   }
 }
 
@@ -1090,21 +1199,11 @@ class GameOverScreen {
   }
 
   destroy() {
-    if (this.graphics) {
-      this.graphics.destroy();
-    }
-    if (this.gameOverText) {
-      this.gameOverText.destroy();
-    }
-    if (this.score1Text) {
-      this.score1Text.destroy();
-    }
-    if (this.score2Text) {
-      this.score2Text.destroy();
-    }
-    if (this.resetButtonText) {
-      this.resetButtonText.destroy();
-    }
+    this.graphics.destroy();
+    this.gameOverText.destroy();
+    this.score1Text.destroy();
+    this.score2Text.destroy();
+    this.resetButtonText.destroy();
   }
 }
 
@@ -1112,7 +1211,12 @@ class GameOverScreen {
 class GameScreen {
   constructor(scene) {
     this.scene = scene;
-    this.playArea = { x: 100, y: 75, width: 600, height: 450 };
+    this.playArea = {
+      x: PADDING_X,
+      y: PADDING_Y,
+      width: WIDTH - PADDING_X * 2,
+      height: HEIGHT - PADDING_Y * 2,
+    };
 
     // Create 2 players at different positions
     this.players = [
@@ -1140,13 +1244,13 @@ class GameScreen {
 
     // Score displays for both players
     this.scoreTexts = [
-      scene.add.text(200, 30, "P1: 0", {
+      scene.add.text(200, 50, "P1: 0", {
         fontSize: "24px",
         fontFamily: "Arial, sans-serif",
         color: "#00ffff",
         align: "center",
       }),
-      scene.add.text(600, 30, "P2: 0", {
+      scene.add.text(600, 50, "P2: 0", {
         fontSize: "24px",
         fontFamily: "Arial, sans-serif",
         color: "#ffaa00",
@@ -1183,29 +1287,23 @@ class GameScreen {
     switch (side) {
       case 0: // Top
         return {
-          x: Math.random() * 800,
-          y: Math.random() * this.playArea.y,
+          x: Math.random() * WIDTH,
+          y: 0,
         };
       case 1: // Right
         return {
-          x:
-            this.playArea.x +
-            this.playArea.width +
-            Math.random() * (800 - this.playArea.x - this.playArea.width),
-          y: Math.random() * 600,
+          x: WIDTH,
+          y: Math.random() * HEIGHT,
         };
       case 2: // Bottom
         return {
-          x: Math.random() * 800,
-          y:
-            this.playArea.y +
-            this.playArea.height +
-            Math.random() * (600 - this.playArea.y - this.playArea.height),
+          x: Math.random() * WIDTH,
+          y: HEIGHT,
         };
       case 3: // Left
         return {
-          x: Math.random() * this.playArea.x,
-          y: Math.random() * 600,
+          x: 0,
+          y: Math.random() * HEIGHT,
         };
       default:
         throw new Error("Invalid side");
@@ -1236,10 +1334,9 @@ class GameScreen {
         targetPlayer = this.players[0];
       }
 
-      const playerPos = { x: targetPlayer.x, y: targetPlayer.y };
-      enemy.move(playerPos, timeStep, this);
+      enemy.move(targetPlayer, timeStep, this);
 
-      for (const action of enemy.getActions(playerPos, time)) {
+      for (const action of enemy.getActions(targetPlayer, time)) {
         if (action instanceof Bullet) {
           this.bullets.push(action);
           // Play bullet fire sound
@@ -1452,9 +1549,7 @@ class GameScreen {
       this.playArea.height
     );
 
-    for (const player of this.players) {
-      player.render(this.graphics, time);
-    }
+    this.players.forEach((p) => p.render(this.graphics, time));
     this.enemies.forEach((e) => e.render(this.graphics));
     this.bullets.forEach((b) => b.render(this.graphics));
   }
@@ -1628,6 +1723,7 @@ class AudioSystem {
 let currentScreen;
 let keys;
 let audioSystem;
+let crtPipelineRegistered = false;
 
 function create() {
   audioSystem = new AudioSystem(this);
@@ -1655,6 +1751,17 @@ function create() {
   keys.player2.flash = this.input.keyboard.addKey(
     Phaser.Input.Keyboard.KeyCodes.L
   );
+
+  if (this.game.renderer instanceof Phaser.Renderer.WebGL.WebGLRenderer) {
+    const pipelineManager = this.game.renderer.pipelines;
+    if (!crtPipelineRegistered && pipelineManager?.addPostPipeline) {
+      pipelineManager.addPostPipeline("crtPipeline", CRTPipeline);
+      crtPipelineRegistered = true;
+    }
+    if (crtPipelineRegistered) {
+      this.cameras.main.setPostPipeline("crtPipeline");
+    }
+  }
 }
 
 function update(time, delta) {
