@@ -96,16 +96,6 @@ class EnemySpawner {
   }
 }
 
-function getSpawnConfig() {
-  return {
-    totalWeight: config.reduce(
-      (acc, enemy) => acc + enemy.probabilityWeight,
-      0
-    ),
-    enemies: config,
-  };
-}
-
 // ========== ACTIONS ==========
 class DeadAction {
   constructor(score, power) {
@@ -450,9 +440,10 @@ class PinkEnemy extends Enemy {
 
 // ========== PLAYER ==========
 class Player {
-  constructor(x, y) {
+  constructor(x, y, index) {
     this.x = x;
     this.y = y;
+    this.index = index;
     this.radius = 15;
     this.hearts = MAX_HEARTS;
     this.power = 0;
@@ -464,7 +455,7 @@ class Player {
     this.lastDirection = { x: 0, y: 0 };
   }
 
-  updateMovement(cursors, time, timeStep, playArea) {
+  updateMovement(keys, time, timeStep, playArea) {
     // Update dash state
     if (this.isDashing && time - this.dashStartTime >= DASH_DURATION) {
       this.isDashing = false;
@@ -474,10 +465,10 @@ class Player {
     let dx = 0;
     let dy = 0;
 
-    if (cursors.left.isDown) dx = -1;
-    else if (cursors.right.isDown) dx = 1;
-    if (cursors.up.isDown) dy = -1;
-    else if (cursors.down.isDown) dy = 1;
+    if (keys.left.isDown) dx = -1;
+    else if (keys.right.isDown) dx = 1;
+    if (keys.up.isDown) dy = -1;
+    else if (keys.down.isDown) dy = 1;
 
     // Normalize diagonal movement
     if (dx !== 0 && dy !== 0) {
@@ -545,9 +536,14 @@ class Player {
   }
 
   render(graphics, time) {
+    if (this.hearts <= 0) return;
+
     const isOnCooldown =
       this.dashEndTime > 0 && time - this.dashEndTime < DASH_COOLDOWN;
     const borderAlpha = this.isDashing || isOnCooldown ? 0.4 : 1;
+
+    // Different colors for each player
+    const playerColor = this.index === 1 ? 0x00ffff : 0xffaa00;
 
     // Flash Range
     graphics.lineStyle(2, 0x00ff00, 0.1);
@@ -563,7 +559,7 @@ class Player {
     }
 
     // Player Border
-    graphics.lineStyle(4, 0x00ffff, borderAlpha);
+    graphics.lineStyle(4, playerColor, borderAlpha);
     graphics.strokeCircle(this.x, this.y, this.radius);
 
     // Power arcs - each circle represents one flash (FLASH_COST power units)
@@ -615,9 +611,10 @@ class Player {
 
 // ========== GAME OVER SCREEN ==========
 class GameOverScreen {
-  constructor(scene, score) {
+  constructor(scene, player1Score, player2Score) {
     this.scene = scene;
-    this.score = score;
+    this.player1Score = player1Score;
+    this.player2Score = player2Score;
 
     // Start game over music
     audioSystem.playGameOverMusic();
@@ -628,7 +625,7 @@ class GameOverScreen {
     this.graphics.fillRect(0, 0, 800, 600);
 
     // Create game over text
-    this.gameOverText = scene.add.text(400, 200, "GAME OVER", {
+    this.gameOverText = scene.add.text(400, 180, "GAME OVER", {
       fontSize: "64px",
       fontFamily: "Arial, sans-serif",
       color: "#ff0000",
@@ -636,20 +633,29 @@ class GameOverScreen {
     });
     this.gameOverText.setOrigin(0.5);
 
-    // Create final score text
-    this.scoreText = scene.add.text(400, 280, "Final Score: " + score, {
+    // Create player 1 score text
+    this.score1Text = scene.add.text(400, 260, "Player 1: " + player1Score, {
+      fontSize: "28px",
+      fontFamily: "Arial, sans-serif",
+      color: "#00ffff",
+      align: "center",
+    });
+    this.score1Text.setOrigin(0.5);
+
+    // Create player 2 score text
+    this.score2Text = scene.add.text(400, 300, "Player 2: " + player2Score, {
+      fontSize: "28px",
+      fontFamily: "Arial, sans-serif",
+      color: "#ffaa00",
+      align: "center",
+    });
+    this.score2Text.setOrigin(0.5);
+
+    // Create reset button text
+    this.resetButtonText = scene.add.text(400, 380, "Press R to Restart", {
       fontSize: "32px",
       fontFamily: "Arial, sans-serif",
       color: "#ffffff",
-      align: "center",
-    });
-    this.scoreText.setOrigin(0.5);
-
-    // Create reset button text
-    this.resetButtonText = scene.add.text(400, 360, "Press R to Restart", {
-      fontSize: "32px",
-      fontFamily: "Arial, sans-serif",
-      color: "#00ffff",
       align: "center",
     });
     this.resetButtonText.setOrigin(0.5);
@@ -670,8 +676,11 @@ class GameOverScreen {
     if (this.gameOverText) {
       this.gameOverText.destroy();
     }
-    if (this.scoreText) {
-      this.scoreText.destroy();
+    if (this.score1Text) {
+      this.score1Text.destroy();
+    }
+    if (this.score2Text) {
+      this.score2Text.destroy();
     }
     if (this.resetButtonText) {
       this.resetButtonText.destroy();
@@ -684,10 +693,21 @@ class GameScreen {
   constructor(scene) {
     this.scene = scene;
     this.playArea = { x: 100, y: 75, width: 600, height: 450 };
-    this.player = new Player(
-      this.playArea.x + this.playArea.width / 2,
-      this.playArea.y + this.playArea.height / 2
-    );
+
+    // Create 2 players at different positions
+    this.players = [
+      new Player(
+        this.playArea.x + this.playArea.width / 3,
+        this.playArea.y + this.playArea.height / 2,
+        1
+      ),
+      new Player(
+        this.playArea.x + (this.playArea.width * 2) / 3,
+        this.playArea.y + this.playArea.height / 2,
+        2
+      ),
+    ];
+
     this.enemies = [];
     this.bullets = [];
 
@@ -697,13 +717,25 @@ class GameScreen {
 
     this.gameOver = false;
     this.graphics = scene.add.graphics();
-    this.scoreText = scene.add.text(400, 30, "Score: 0", {
-      fontSize: "24px",
-      fontFamily: "Arial, sans-serif",
-      color: "#ffffff",
-      align: "center",
-    });
-    this.scoreText.setOrigin(0.5);
+
+    // Score displays for both players
+    this.scoreTexts = [
+      scene.add.text(200, 30, "P1: 0", {
+        fontSize: "24px",
+        fontFamily: "Arial, sans-serif",
+        color: "#00ffff",
+        align: "center",
+      }),
+      scene.add.text(600, 30, "P2: 0", {
+        fontSize: "24px",
+        fontFamily: "Arial, sans-serif",
+        color: "#ffaa00",
+        align: "center",
+      }),
+    ];
+    this.scoreTexts[0].setOrigin(0.5);
+    this.scoreTexts[1].setOrigin(0.5);
+
     this.enemySpawner = new EnemySpawner();
 
     // Start game music
@@ -760,10 +792,30 @@ class GameScreen {
   }
 
   updateEnemies(time, timeStep) {
-    const playerPos = { x: this.player.x, y: this.player.y };
-
+    // Get nearest player for each enemy
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
+
+      // Find closest player that's alive
+      let targetPlayer = null;
+      let minDist = Infinity;
+
+      for (const player of this.players) {
+        if (player.hearts > 0) {
+          const dist = enemy.distanceTo(player);
+          if (dist < minDist) {
+            minDist = dist;
+            targetPlayer = player;
+          }
+        }
+      }
+
+      // If no player is alive, just pick the first player
+      if (!targetPlayer) {
+        targetPlayer = this.players[0];
+      }
+
+      const playerPos = { x: targetPlayer.x, y: targetPlayer.y };
       enemy.move(playerPos, timeStep, this);
 
       for (const action of enemy.getActions(playerPos, time)) {
@@ -774,10 +826,13 @@ class GameScreen {
         }
       }
 
-      // Check collision with player
-      if (enemy.collidesWith(this.player)) {
-        const collisionActions = enemy.onCollision();
-        this.processActions(collisionActions, i);
+      // Check collision with all players
+      for (const player of this.players) {
+        if (enemy.collidesWith(player) && player.hearts > 0) {
+          const collisionActions = enemy.onCollision();
+          this.processActions(collisionActions, player, i);
+          break; // Only process collision with one player
+        }
       }
     }
   }
@@ -789,26 +844,33 @@ class GameScreen {
 
       if (isOffScreen(bullet)) {
         this.bullets.splice(i, 1);
-      } else if (bullet.collidesWith(this.player)) {
-        this.bullets.splice(i, 1);
-        // Play hit sound when player takes damage
-        audioSystem.playHitSound();
-        if (this.player.takeDamage(1)) {
-          this.endGame();
+      } else {
+        // Check collision with all players
+        let hitPlayer = false;
+        for (const player of this.players) {
+          if (bullet.collidesWith(player) && player.hearts > 0) {
+            this.bullets.splice(i, 1);
+            // Play hit sound when player takes damage
+            audioSystem.playHitSound();
+            player.takeDamage(1);
+            this.checkGameOver();
+            hitPlayer = true;
+            break;
+          }
         }
       }
     }
   }
 
-  processActions(actions, enemyIndex = -1) {
+  processActions(actions, player, enemyIndex = -1) {
     for (const action of actions) {
       if (action instanceof DeadAction) {
         // Play capture sound if enemy gave score (was killed)
         if (action.score > 0) {
           audioSystem.playCaptureSound();
         }
-        this.player.addScore(action.score);
-        this.player.addPower(action.power);
+        player.addScore(action.score);
+        player.addPower(action.power);
         this.updateScoreDisplay();
         if (enemyIndex >= 0) {
           this.enemies.splice(enemyIndex, 1);
@@ -818,30 +880,29 @@ class GameScreen {
         if (action.healthChange < 0) {
           // Play hit sound when player takes damage
           audioSystem.playHitSound();
-          if (this.player.takeDamage(-action.healthChange)) {
-            this.endGame();
-          }
+          player.takeDamage(-action.healthChange);
+          this.checkGameOver();
         } else {
           const newHearts = Math.min(
-            this.player.hearts + action.healthChange,
+            player.hearts + action.healthChange,
             MAX_HEARTS
           );
-          if (newHearts > this.player.hearts) {
+          if (newHearts > player.hearts) {
             audioSystem.playHeartSound();
           }
-          this.player.hearts = newHearts;
+          player.hearts = newHearts;
         }
       }
     }
   }
 
-  flash(time) {
-    if (!this.player.tryFlash(time)) return;
+  flash(player, time) {
+    if (!player.tryFlash(time)) return;
 
     // Play flash sound effect
     audioSystem.playFlashSound();
 
-    const playerPos = { x: this.player.x, y: this.player.y };
+    const playerPos = { x: player.x, y: player.y };
     let enemiesKilled = 0;
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
@@ -853,8 +914,8 @@ class GameScreen {
               : enemy instanceof GreenEnemy
               ? 150
               : 200;
-          this.player.addScore(score);
-          this.player.addPower(1);
+          player.addScore(score);
+          player.addPower(1);
           this.updateScoreDisplay();
           this.enemies.splice(i, 1);
           enemiesKilled++;
@@ -868,24 +929,24 @@ class GameScreen {
   }
 
   updateScoreDisplay() {
-    this.scoreText.setText("Score: " + this.player.score);
+    for (let i = 0; i < this.players.length; i++) {
+      this.scoreTexts[i].setText("P" + (i + 1) + ": " + this.players[i].score);
+    }
   }
 
-  endGame() {
-    this.gameOver = true;
+  checkGameOver() {
+    // Game ends when both players are dead
+    const allDead = this.players.every((player) => player.hearts <= 0);
+    if (allDead) {
+      this.gameOver = true;
+    }
   }
 
   destroy() {
-    if (this.graphics) {
-      this.graphics.destroy();
+    this.graphics.destroy();
+    for (const scoreText of this.scoreTexts) {
+      scoreText.destroy();
     }
-    if (this.scoreText) {
-      this.scoreText.destroy();
-    }
-
-    // Clear arrays
-    this.enemies = [];
-    this.bullets = [];
   }
 
   update(time, delta, keys) {
@@ -894,15 +955,40 @@ class GameScreen {
     const timeStep = Math.min(delta, 100) / 1000;
 
     if (!this.gameOver) {
-      // Handle player input
-      this.player.updateMovement(keys.cursors, time, timeStep, this.playArea);
+      // Handle player 1 input (WASD + C for dash + V for flash)
+      if (this.players[0].hearts > 0) {
+        this.players[0].updateMovement(
+          keys.player1,
+          time,
+          timeStep,
+          this.playArea
+        );
 
-      if (Phaser.Input.Keyboard.JustDown(keys.dashKey)) {
-        this.player.tryDash(time);
+        if (Phaser.Input.Keyboard.JustDown(keys.player1.dash)) {
+          this.players[0].tryDash(time);
+        }
+
+        if (Phaser.Input.Keyboard.JustDown(keys.player1.flash)) {
+          this.flash(this.players[0], time);
+        }
       }
 
-      if (Phaser.Input.Keyboard.JustDown(keys.flashKey)) {
-        this.flash(time);
+      // Handle player 2 input (Arrow keys + K for dash + L for flash)
+      if (this.players[1].hearts > 0) {
+        this.players[1].updateMovement(
+          keys.player2,
+          time,
+          timeStep,
+          this.playArea
+        );
+
+        if (Phaser.Input.Keyboard.JustDown(keys.player2.dash)) {
+          this.players[1].tryDash(time);
+        }
+
+        if (Phaser.Input.Keyboard.JustDown(keys.player2.flash)) {
+          this.flash(this.players[1], time);
+        }
       }
 
       // Update game logic
@@ -915,7 +1001,11 @@ class GameScreen {
 
     // Check if game just ended and return game over screen
     if (this.gameOver) {
-      return new GameOverScreen(this.scene, this.player.score);
+      return new GameOverScreen(
+        this.scene,
+        this.players[0].score,
+        this.players[1].score
+      );
     }
 
     return null;
@@ -933,7 +1023,9 @@ class GameScreen {
       this.playArea.height
     );
 
-    this.player.render(this.graphics, time);
+    for (const player of this.players) {
+      player.render(this.graphics, time);
+    }
     this.enemies.forEach((e) => e.render(this.graphics));
     this.bullets.forEach((b) => b.render(this.graphics));
   }
@@ -1098,11 +1190,25 @@ function create() {
   currentScreen = new GameScreen(this);
 
   keys = {
-    cursors: this.input.keyboard.createCursorKeys(),
-    dashKey: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C),
-    flashKey: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+    player1: {
+      left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+      right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
+      up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
+      down: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
+      flash: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C),
+      dash: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.V),
+    },
+    player2: this.input.keyboard.createCursorKeys(),
     resetKey: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R),
   };
+
+  // Add dash and flash keys for player 2
+  keys.player2.dash = this.input.keyboard.addKey(
+    Phaser.Input.Keyboard.KeyCodes.K
+  );
+  keys.player2.flash = this.input.keyboard.addKey(
+    Phaser.Input.Keyboard.KeyCodes.L
+  );
 }
 
 function update(time, delta) {
