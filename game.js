@@ -62,7 +62,7 @@ const PINK_ACC_LIMIT = 10;
 const YELLOW_SPEED = 50;
 const YELLOW_RADIUS = 10;
 const YELLOW_SHOOT_MIN_DISTANCE = RED_MIN_SHOOT_DISTANCE;
-const YELLOW_SHOOT_MAX_DISTANCE = YELLOW_SHOOT_MIN_DISTANCE + 10;
+const YELLOW_SHOOT_MAX_DISTANCE = 95;
 const YELLOW_SHOOT_COOLDOWN = 2000;
 const YELLOW_BULLET_SPEED = 100;
 const YELLOW_BULLETS_PER_SHOT = 14;
@@ -174,12 +174,12 @@ class EnemySpawner {
     {
       enemyClass: YellowEnemy,
       probabilityWeight: 12,
-      maxAmountOnScreen: 3,
+      maxAmountOnScreen: 5,
     },
     {
       enemyClass: BlueEnemy,
       probabilityWeight: 8,
-      maxAmountOnScreen: 4,
+      maxAmountOnScreen: 6,
     },
   ];
 
@@ -681,7 +681,7 @@ class PinkEnemy extends Enemy {
     }
 
     // Draw heart inside
-    drawHeart(graphics, this.x, this.y, this.radius * 0.8, 1);
+    drawHeart(graphics, this.x, this.y, this.radius * 1.1, 1);
   }
 }
 
@@ -767,9 +767,13 @@ class BlueEnemy extends Enemy {
     super(x, y, r, game);
     this.hasShield = true;
     this.targetX =
-      game.playArea.x + game.playArea.width * (0.2 + Math.random() * 0.8);
+      game.playArea.x +
+      0.1 * game.playArea.width +
+      0.8 * game.playArea.width * Math.random();
     this.targetY =
-      game.playArea.y + game.playArea.height * (0.2 + Math.random() * 0.8);
+      game.playArea.y +
+      0.1 * game.playArea.height +
+      0.8 * game.playArea.height * Math.random();
     this.hasReachedTarget = false;
     this.hasShot = false;
   }
@@ -839,6 +843,10 @@ class BlueEnemy extends Enemy {
   render(graphics) {
     const sqrt3 = 0.8660254;
     const triangleSize = this.radius * 0.8;
+
+    // Dar small circle on tarket;
+    graphics.fillStyle(0x4444ff, 0.5);
+    graphics.fillCircle(this.targetX, this.targetY, 3);
 
     // Draw blue circle outline
     graphics.lineStyle(2, 0x4444ff, this.hasShield ? 1 : 0.2);
@@ -1018,7 +1026,7 @@ class Player {
     }
 
     // Hearts
-    const heartSize = 16;
+    const heartSize = 17;
     const heartOffset = 4;
     drawHeart(
       graphics,
@@ -1592,7 +1600,7 @@ class GameScreen {
 const backupLocalStorage = new Map();
 function getStorage() {
   try {
-    localStorage.setItem("--close-corners-highScore", "0");
+    localStorage.getItem("--close-corners-highScore");
     return localStorage;
   } catch {
     return {
