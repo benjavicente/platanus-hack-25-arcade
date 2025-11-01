@@ -62,7 +62,7 @@ const PINK_ACC_LIMIT = 10;
 const YELLOW_SPEED = 50;
 const YELLOW_RADIUS = 10;
 const YELLOW_SHOOT_MIN_DISTANCE = RED_MIN_SHOOT_DISTANCE;
-const YELLOW_SHOOT_MAX_DISTANCE = 80;
+const YELLOW_SHOOT_MAX_DISTANCE = YELLOW_SHOOT_MIN_DISTANCE + 10;
 const YELLOW_SHOOT_COOLDOWN = 2000;
 const YELLOW_BULLET_SPEED = 100;
 const YELLOW_BULLETS_PER_SHOT = 14;
@@ -1589,15 +1589,15 @@ class GameScreen {
   }
 }
 
+const backupLocalStorage = new Map();
 function getStorage() {
   try {
     localStorage.setItem("--close-corners-highScore", "0");
     return localStorage;
   } catch {
-    const map = new Map();
     return {
-      getItem: (key) => map.get(key),
-      setItem: (key, value) => map.set(key, value),
+      getItem: (key) => backupLocalStorage.get(key),
+      setItem: (key, value) => backupLocalStorage.set(key, value),
     };
   }
 }
