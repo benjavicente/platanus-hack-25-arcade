@@ -1591,7 +1591,7 @@ class GameScreen {
 
 function getStorage() {
   try {
-    localStorage.getItem("--close-corners-highScore");
+    localStorage.setItem("--close-corners-highScore", "0");
     return localStorage;
   } catch {
     const map = new Map();
