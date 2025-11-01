@@ -2,7 +2,7 @@
 
 const WIDTH = 800;
 const HEIGHT = 600;
-const PADDING_X = 100;
+const PADDING_X = 90;
 const PADDING_Y = 75;
 const BACKGROUND_COLOR = "#000000";
 
@@ -45,15 +45,11 @@ const MAX_POWER = FLASH_COST * 3;
 
 const RED_SPEED = 80;
 const RED_RADIUS = 10;
-const RED_SPAWN_INTERVAL = 1500;
-const RED_SPAWN_INCREASE = 50;
 const RED_SHOOT_INTERVAL = 2000;
-const RED_MIN_SHOOT_DISTANCE = 40;
+const RED_MIN_SHOOT_DISTANCE = 75;
 const RED_BULLET_SPEED = 200;
 
 const GREEN_RADIUS = 12;
-const GREEN_SPAWN_INTERVAL = 3000;
-const GREEN_SPAWN_INCREASE = 100;
 const GREEN_ACC_LIMIT = 120;
 const GREEN_VEL_LIMIT = 90;
 const GREEN_REPULSION_STRENGTH = 800;
@@ -61,23 +57,18 @@ const GREEN_REPULSION_RADIUS = 80;
 
 const PINK_SPEED = 50;
 const PINK_RADIUS = 14;
-const PINK_SPAWN_INTERVAL = 4000;
-const PINK_SPAWN_INCREASE = 150;
 const PINK_ACC_LIMIT = 10;
 
 const YELLOW_SPEED = 50;
 const YELLOW_RADIUS = 10;
-const YELLOW_SPAWN_INTERVAL = 2500;
-const YELLOW_SPAWN_INCREASE = 75;
-const YELLOW_SHOOT_MIN_DISTANCE = 50;
+const YELLOW_SHOOT_MIN_DISTANCE = RED_MIN_SHOOT_DISTANCE;
 const YELLOW_SHOOT_MAX_DISTANCE = 80;
 const YELLOW_SHOOT_COOLDOWN = 2000;
 const YELLOW_BULLET_SPEED = 100;
+const YELLOW_BULLETS_PER_SHOT = 14;
 
 const BLUE_SPEED = 60;
 const BLUE_RADIUS = 12;
-const BLUE_SPAWN_INTERVAL = 5000;
-const BLUE_SPAWN_INCREASE = 200;
 const BLUE_BULLET_SPEED = 150;
 const BLUE_BULLET_RADIUS = 80;
 
@@ -97,11 +88,15 @@ float rand(vec2 co) {
 
 void main() {
   vec2 uv = outTexCoord;
+  // Zoom: scale uv around center
+  float zoom = 1.15;
+  uv = (uv - 0.5) / zoom + 0.5;
+
   vec2 centered = uv * 2.0 - 1.0;
   float dist = dot(centered, centered);
 
   // Barrel distortion
-  centered *= 1.0 + dist * 0.08;
+  centered *= 1.0 + dist * 0.1;
   uv = centered * 0.5 + 0.5;
 
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
@@ -116,11 +111,11 @@ void main() {
   color -= scan;
 
   // Shadow mask
-  float mask = sin(uv.x * resolution.x * 0.75) * 0.04;
+  float mask = sin(uv.x * resolution.x * 0.75) * 0.05;
   color += mask;
 
   // Flicker noise
-  float noise = rand(vec2(time * 10.0, uv.y)) * 0.04;
+  float noise = rand(vec2(time * 10.0, uv.y)) * 0.03;
   color += noise;
 
   // Vignette
@@ -129,8 +124,7 @@ void main() {
 
   color = clamp(color, 0.0, 1.0);
   gl_FragColor = vec4(color, 1.0);
-}
-`;
+}`;
 
 class CRTPipeline extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline {
   constructor(game) {
@@ -411,13 +405,13 @@ class RedEnemy extends Enemy {
   }
 
   onCollision() {
-    return [new DeadAction(100, 1)];
+    return [new DeadAction(25, 1)];
   }
 
   onFlashed() {
     this.triangleHearts -= FLASH_DAMAGE;
     if (this.triangleHearts <= 0) {
-      return [new DeadAction(100, 0)];
+      return [new DeadAction(10, 0)];
     }
     return [];
   }
@@ -498,7 +492,7 @@ class GreenEnemy extends Enemy {
   onFlashed() {
     this.triangleHearts -= FLASH_DAMAGE;
     if (this.triangleHearts <= 0) {
-      return [new DeadAction(150, 0)];
+      return [new DeadAction(250, 0)];
     }
     return [];
   }
@@ -649,7 +643,7 @@ class PinkEnemy extends Enemy {
       this.hasShield = false;
       return [];
     } else {
-      return [new DeadAction(200, 0)];
+      return [new DeadAction(0, 0)];
     }
   }
 
@@ -735,7 +729,7 @@ class YellowEnemy extends Enemy {
       distance <= YELLOW_SHOOT_MAX_DISTANCE &&
       currentTime - this.lastShotTime >= YELLOW_SHOOT_COOLDOWN
     ) {
-      const numBullets = 20;
+      const numBullets = YELLOW_BULLETS_PER_SHOT;
       for (let i = 0; i < numBullets; i++) {
         const angle = (i / numBullets) * Math.PI * 2;
         const vx = Math.cos(angle) * YELLOW_BULLET_SPEED + this.vx;
@@ -755,7 +749,7 @@ class YellowEnemy extends Enemy {
   onFlashed() {
     this.triangleHearts -= FLASH_DAMAGE;
     if (this.triangleHearts <= 0) {
-      return [new DeadAction(500, 0)];
+      return [new DeadAction(50, 0)];
     }
     return [];
   }
@@ -830,7 +824,7 @@ class BlueEnemy extends Enemy {
       this.hasShield = false;
       return [];
     } else {
-      return [new DeadAction(300, 0)];
+      return [new DeadAction(200, 0)];
     }
   }
 
@@ -838,7 +832,7 @@ class BlueEnemy extends Enemy {
     if (this.hasShield) {
       return [new HealthAction(-1), new DeadAction(0, 0)];
     } else {
-      return [new DeadAction(0, MAX_POWER)];
+      return [new DeadAction(100, MAX_POWER)];
     }
   }
 
@@ -1067,7 +1061,12 @@ class TitleScreen {
 
     this.frame = scene.add.graphics();
     this.frame.lineStyle(6, 0x00ffff, 0.4);
-    this.frame.strokeRect(140, 120, 520, 360);
+    this.frame.strokeRect(
+      PADDING_X,
+      PADDING_Y,
+      WIDTH - PADDING_X * 2,
+      HEIGHT - PADDING_Y * 2
+    );
 
     this.titleText = scene.add.text(400, 280, "close corners", {
       fontSize: "72px",
@@ -1078,7 +1077,7 @@ class TitleScreen {
     });
     this.titleText.setOrigin(0.5);
 
-    this.promptText = scene.add.text(400, 380, "Press SPACE to begin", {
+    this.promptText = scene.add.text(400, 340, "Press SPACE to begin", {
       fontSize: "28px",
       fontFamily: "Arial, sans-serif",
       color: "#ffffff",
@@ -1086,9 +1085,23 @@ class TitleScreen {
     });
     this.promptText.setOrigin(0.5);
 
+    this.highScoreText = scene.add.text(
+      400,
+      420,
+      "High Score: " + getHighestScore(),
+      {
+        fontSize: "28px",
+        fontFamily: "Arial, sans-serif",
+        color: "#ffffff",
+        align: "center",
+      }
+    );
+    this.highScoreText.setOrigin(0.5);
+    this.highScoreText.setAlpha(0.5);
+
     this.controlsTextP1 = scene.add.text(
-      270,
-      465,
+      250,
+      500,
       "P1: WASD + V dash + C flash",
       {
         fontSize: "18px",
@@ -1099,8 +1112,8 @@ class TitleScreen {
     this.controlsTextP1.setOrigin(0.5);
 
     this.controlsTextP2 = scene.add.text(
-      530,
-      465,
+      550,
+      500,
       "P2: Arrows + K dash + L flash",
       {
         fontSize: "18px",
@@ -1135,6 +1148,7 @@ class TitleScreen {
     this.promptText.destroy();
     this.controlsTextP1.destroy();
     this.controlsTextP2.destroy();
+    this.highScoreText.destroy();
   }
 }
 
@@ -1180,14 +1194,32 @@ class GameOverScreen {
     });
     this.score2Text.setOrigin(0.5);
 
+    const highScore = registerAndGetHighestScore(player1Score, player2Score);
+    this.highScoreText = scene.add.text(400, 340, "High Score: " + highScore, {
+      fontSize: "28px",
+      fontFamily: "Arial, sans-serif",
+      color: "#ffffff",
+      align: "center",
+    });
+    this.highScoreText.setOrigin(0.5);
+    this.highScoreText.setAlpha(0.5);
+
     // Create reset button text
-    this.resetButtonText = scene.add.text(400, 380, "Press SPACE to Restart", {
+    this.resetButtonText = scene.add.text(400, 420, "Press SPACE to Restart", {
       fontSize: "32px",
       fontFamily: "Arial, sans-serif",
       color: "#ffffff",
       align: "center",
     });
     this.resetButtonText.setOrigin(0.5);
+    this.resetButtonTween = scene.tweens.add({
+      targets: this.resetButtonText,
+      alpha: { from: 0.2, to: 1 },
+      duration: 900,
+      ease: "Sine.easeInOut",
+      yoyo: true,
+      repeat: -1,
+    });
   }
 
   update(time, delta, keys) {
@@ -1204,6 +1236,8 @@ class GameOverScreen {
     this.score1Text.destroy();
     this.score2Text.destroy();
     this.resetButtonText.destroy();
+    this.highScoreText.destroy();
+    this.resetButtonTween.destroy();
   }
 }
 
@@ -1553,6 +1587,17 @@ class GameScreen {
     this.enemies.forEach((e) => e.render(this.graphics));
     this.bullets.forEach((b) => b.render(this.graphics));
   }
+}
+
+function getHighestScore() {
+  const score = localStorage.getItem("--close-corners-highScore");
+  return score ? Number.parseInt(score, 10) : 0;
+}
+
+function registerAndGetHighestScore(...scores) {
+  const highScore = Math.max(...scores, getHighestScore());
+  localStorage.setItem("--close-corners-highScore", highScore.toString());
+  return highScore;
 }
 
 // ========== HELPERS ==========
