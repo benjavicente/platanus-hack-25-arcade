@@ -1589,14 +1589,26 @@ class GameScreen {
   }
 }
 
+function getStorage() {
+  try {
+    return localStorage;
+  } catch {
+    const map = new Map();
+    return {
+      getItem: (key) => map.get(key),
+      setItem: (key, value) => map.set(key, value),
+    };
+  }
+}
+
 function getHighestScore() {
-  const score = localStorage.getItem("--close-corners-highScore");
+  const score = getStorage().getItem("--close-corners-highScore");
   return score ? Number.parseInt(score, 10) : 0;
 }
 
 function registerAndGetHighestScore(...scores) {
   const highScore = Math.max(...scores, getHighestScore());
-  localStorage.setItem("--close-corners-highScore", highScore.toString());
+  getStorage().setItem("--close-corners-highScore", highScore.toString());
   return highScore;
 }
 
