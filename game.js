@@ -36,6 +36,9 @@ const DASH_SPEED_MULTIPLIER = 3;
 const PLAYER_SPEED = 200;
 const PLAYER_INVULNERABILITY_TIME = 750;
 
+const HIT_SHAKE_TIME = 300;
+const SHAKE_INTENSITY = 0.3;
+
 const FLASH_COST = 4;
 const FLASH_RANGE = 100;
 const FLASH_DAMAGE = 1;
@@ -61,11 +64,11 @@ const PINK_ACC_LIMIT = 10;
 
 const YELLOW_SPEED = 50;
 const YELLOW_RADIUS = 10;
-const YELLOW_SHOOT_MIN_DISTANCE = RED_MIN_SHOOT_DISTANCE;
+const YELLOW_SHOOT_MIN_DISTANCE = 85;
 const YELLOW_SHOOT_MAX_DISTANCE = 95;
 const YELLOW_SHOOT_COOLDOWN = 2000;
 const YELLOW_BULLET_SPEED = 100;
-const YELLOW_BULLETS_PER_SHOT = 14;
+const YELLOW_BULLETS_PER_SHOT = 12;
 
 const BLUE_SPEED = 60;
 const BLUE_RADIUS = 12;
@@ -89,14 +92,14 @@ float rand(vec2 co) {
 void main() {
   vec2 uv = outTexCoord;
   // Zoom: scale uv around center
-  float zoom = 1.15;
+  float zoom = 1.18;
   uv = (uv - 0.5) / zoom + 0.5;
 
   vec2 centered = uv * 2.0 - 1.0;
   float dist = dot(centered, centered);
 
   // Barrel distortion
-  centered *= 1.0 + dist * 0.1;
+  centered *= 1.0 + dist * 0.11;
   uv = centered * 0.5 + 0.5;
 
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
@@ -107,19 +110,19 @@ void main() {
   vec3 color = texture2D(uMainSampler, uv).rgb;
 
   // Scanlines
-  float scan = sin((uv.y + time * 0.5) * resolution.y * 1.5) * 0.08;
+  float scan = sin((uv.y + time * 0.5) * resolution.y * 1.5) * 0.09;
   color -= scan;
 
   // Shadow mask
-  float mask = sin(uv.x * resolution.x * 0.75) * 0.05;
+  float mask = sin(uv.x * resolution.x * 0.75) * 0.04;
   color += mask;
 
   // Flicker noise
-  float noise = rand(vec2(time * 10.0, uv.y)) * 0.03;
+  float noise = rand(vec2(time * 10.0, uv.y)) * 0.01;
   color += noise;
 
   // Vignette
-  float vignette = 1.0 - dist * 0.35;
+  float vignette = 1.0 - dist * 0.7;
   color *= vignette;
 
   color = clamp(color, 0.0, 1.0);
@@ -211,15 +214,15 @@ class EnemySpawner {
     for (const enemy of ajustedHeights) {
       cumulativeWeight += enemy.probabilityWeight;
       if (randomWeight < cumulativeWeight) {
-        // decrease by 1% the prob of the chosen enremy type
         const enemyType = this.config.find(
           (e) => e.enemyClass === enemy.enemyClass
         );
-        if (enemyType)
+        if (enemyType) {
           enemyType.probabilityWeight = Math.max(
             1,
-            enemyType.probabilityWeight * 0.99
+            enemyType.probabilityWeight * 0.98
           );
+        }
         return enemy;
       }
     }
@@ -416,10 +419,15 @@ class RedEnemy extends Enemy {
     return [];
   }
 
-  render(graphics) {
-    graphics.fillStyle(0xff0000, 1);
+  render(graphics, currentTime) {
+    const initialOpacity = 0.6;
+    const timeSinceShot = currentTime - this.lastShotTime;
+    const factor = Math.min(timeSinceShot / RED_SHOOT_INTERVAL, 1);
+    const opacity = initialOpacity + (1 - initialOpacity) * Math.pow(factor, 8);
+
+    graphics.fillStyle(0xff0000, opacity);
     graphics.fillCircle(this.x, this.y, this.radius);
-    graphics.lineStyle(2, 0xcc0000, 1);
+    graphics.lineStyle(2, 0xcc0000, opacity);
     graphics.strokeCircle(this.x, this.y, this.radius);
   }
 }
@@ -501,7 +509,7 @@ class GreenEnemy extends Enemy {
     return [new HealthAction(-1), new DeadAction(0, 0)];
   }
 
-  render(graphics) {
+  render(graphics, currentTime) {
     const outerSize = this.radius;
     const innerSize = this.radius * 0.6;
     const sqrt3 = 0.8660254;
@@ -655,7 +663,7 @@ class PinkEnemy extends Enemy {
     }
   }
 
-  render(graphics) {
+  render(graphics, currentTime) {
     const sqrt3 = 0.8660254;
     const triangleSize = this.radius * 0.8;
 
@@ -754,10 +762,15 @@ class YellowEnemy extends Enemy {
     return [];
   }
 
-  render(graphics) {
-    graphics.fillStyle(0xffff00, 1);
+  render(graphics, currentTime) {
+    const initialOpacity = 0.6;
+    const timeSinceShot = currentTime - this.lastShotTime;
+    const factor = Math.min(timeSinceShot / RED_SHOOT_INTERVAL, 1);
+    const opacity = initialOpacity + (1 - initialOpacity) * Math.pow(factor, 8);
+
+    graphics.fillStyle(0xffff00, opacity);
     graphics.fillCircle(this.x, this.y, this.radius);
-    graphics.lineStyle(2, 0xcccc00, 1);
+    graphics.lineStyle(2, 0xcccc00, opacity);
     graphics.strokeCircle(this.x, this.y, this.radius);
   }
 }
@@ -828,7 +841,7 @@ class BlueEnemy extends Enemy {
       this.hasShield = false;
       return [];
     } else {
-      return [new DeadAction(200, 0)];
+      return [new DeadAction(150, 0)];
     }
   }
 
@@ -840,7 +853,7 @@ class BlueEnemy extends Enemy {
     }
   }
 
-  render(graphics) {
+  render(graphics, currentTime) {
     const sqrt3 = 0.8660254;
     const triangleSize = this.radius * 0.8;
 
@@ -1283,22 +1296,31 @@ class GameScreen {
 
     this.gameOver = false;
     this.graphics = scene.add.graphics();
+    this.lastHitAt = 0;
 
     // Score displays for both players
     this.scoreTexts = [
-      scene.add.text(200, 50, "P1: 0", {
+      scene.add.text(180, 60, "P1: 0", {
         fontSize: "24px",
         fontFamily: "Arial, sans-serif",
         color: "#00ffff",
         align: "center",
       }),
-      scene.add.text(600, 50, "P2: 0", {
+      scene.add.text(620, 60, "P2: 0", {
         fontSize: "24px",
         fontFamily: "Arial, sans-serif",
         color: "#ffaa00",
         align: "center",
       }),
     ];
+    this.timeText = scene.add.text(WIDTH / 2, HEIGHT - PADDING_Y + 18, "0:00", {
+      fontSize: "24px",
+      fontFamily: "Arial, sans-serif",
+      align: "center",
+      color: "#808080",
+    });
+    this.timeText.setOrigin(0.5);
+
     this.scoreTexts[0].setOrigin(0.5);
     this.scoreTexts[1].setOrigin(0.5);
 
@@ -1317,7 +1339,7 @@ class GameScreen {
     const newEnemy = this.enemySpawner.getRandomEnemy(this.enemies);
 
     if (!newEnemy) return;
-    this.spawnDelay = Math.max(0.1, this.spawnDelay - 0.002);
+    this.spawnDelay = Math.max(0.1, this.spawnDelay - 0.003);
 
     const { x, y } = this.getSpawnPosition();
     this.enemies.push(new newEnemy.enemyClass(x, y, undefined, this));
@@ -1416,6 +1438,7 @@ class GameScreen {
             this.bullets.splice(i, 1);
             // Play hit sound when player takes damage
             audioSystem.playHitSound();
+            this.lastHitAt = time;
             player.takeDamage(1, time);
             this.checkGameOver();
             hitPlayer = true;
@@ -1446,6 +1469,7 @@ class GameScreen {
           if (!player.isInvulnerable(time)) {
             // Play hit sound when player takes damage
             audioSystem.playHitSound();
+            this.lastHitAt = time;
             player.takeDamage(-action.healthChange, time);
             this.checkGameOver();
           }
@@ -1512,6 +1536,7 @@ class GameScreen {
 
   destroy() {
     this.graphics.destroy();
+    this.timeText.destroy();
     for (const scoreText of this.scoreTexts) {
       scoreText.destroy();
     }
@@ -1521,6 +1546,11 @@ class GameScreen {
     if (this.startTime === 0) this.startTime = time;
 
     const timeStep = Math.min(delta, 100) / 1000;
+
+    const elapsed = (time - this.startTime) / 1000;
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = Math.floor(elapsed % 60);
+    this.timeText.setText(minutes + ":" + seconds.toString().padStart(2, "0"));
 
     if (!this.gameOver) {
       // Handle player 1 input (WASD + C for dash + V for flash)
@@ -1565,6 +1595,9 @@ class GameScreen {
       this.updateBullets(timeStep, time);
     }
 
+    // Update camera shake
+    this.updateShake(time);
+
     this.render(time);
 
     // Check if game just ended and return game over screen
@@ -1577,6 +1610,24 @@ class GameScreen {
     }
 
     return null;
+  }
+
+  updateShake(time) {
+    let shakeX = 0;
+    let shakeY = 0;
+
+    if (!this.gameOver) {
+      const timeSinceHit = time - this.lastHitAt;
+      if (timeSinceHit < HIT_SHAKE_TIME) {
+        // Stronger shake during hit effect
+        const hitShakeIntensity =
+          SHAKE_INTENSITY * 8 * (1 - timeSinceHit / HIT_SHAKE_TIME);
+        shakeX = (Math.random() - 0.5) * hitShakeIntensity;
+        shakeY = (Math.random() - 0.5) * hitShakeIntensity;
+      }
+    }
+
+    this.scene.cameras.main.setScroll(shakeX, shakeY);
   }
 
   render(time) {
@@ -1592,7 +1643,7 @@ class GameScreen {
     );
 
     this.players.forEach((p) => p.render(this.graphics, time));
-    this.enemies.forEach((e) => e.render(this.graphics));
+    this.enemies.forEach((e) => e.render(this.graphics, time));
     this.bullets.forEach((b) => b.render(this.graphics));
   }
 }
@@ -1671,8 +1722,8 @@ class AudioSystem {
 
   playGameMusic() {
     this.stopAll();
-    const highNote = 293.66; // D4
-    const lowNote = 220; // A3
+    const highNote = 293.66;
+    const lowNote = 220;
     const pattern = [
       { note: highNote, duration: 800, delay: 800 }, // 2 beats
       { note: highNote, duration: 100, delay: 200 }, // 1 beat
