@@ -1106,17 +1106,17 @@ class TitleScreen {
     });
     this.promptText.setOrigin(0.5);
 
-    this.highScoreText = scene.add.text(
-      400,
-      420,
-      "High Score: " + getHighestScore(),
-      {
-        fontSize: "28px",
-        fontFamily: "Arial, sans-serif",
-        color: "#ffffff",
-        align: "center",
-      }
-    );
+    const leaderboard = getLeaderboard();
+    const topScore = leaderboard[0];
+    const highScoreText = topScore
+      ? `High Score: ${topScore.name.trim()} - ${topScore.score}`
+      : "High Score: 0";
+    this.highScoreText = scene.add.text(400, 420, highScoreText, {
+      fontSize: "28px",
+      fontFamily: "Arial, sans-serif",
+      color: "#ffffff",
+      align: "center",
+    });
     this.highScoreText.setOrigin(0.5);
     this.highScoreText.setAlpha(0.5);
 
@@ -1180,59 +1180,46 @@ class GameOverScreen {
     this.player1Score = player1Score;
     this.player2Score = player2Score;
 
+    // Generate unique IDs for both players
+    const timestamp = Date.now();
+    const random1 = Math.floor(Math.random() * 10000);
+    const random2 = Math.floor(Math.random() * 10000);
+    this.player1Id = `${timestamp}-1-${random1}`;
+    this.player2Id = `${timestamp}-2-${random2}`;
+
+    // Check if scores qualify for leaderboard and add them
+    this.player1InLeaderboard = addScoreToLeaderboard(
+      player1Score,
+      lastPlayer1Name,
+      this.player1Id
+    );
+    this.player2InLeaderboard = addScoreToLeaderboard(
+      player2Score,
+      lastPlayer2Name,
+      this.player2Id
+    );
+
+    // Name input state for both players - use last saved names
+    this.player1Name = lastPlayer1Name.split("");
+    this.player2Name = lastPlayer2Name.split("");
+    this.player1CharPos = 0;
+    this.player2CharPos = 0;
+
+    // Track key states for input handling
+    this.lastP1UpDown = 0;
+    this.lastP1Dash = 0;
+    this.lastP2UpDown = 0;
+    this.lastP2Dash = 0;
+
     // Start game over music
     audioSystem.playGameOverMusic();
 
-    // Create dark overlay
+    // Create all UI elements
     this.graphics = scene.add.graphics();
-    this.graphics.fillStyle(0x000000, 0.8);
-    this.graphics.fillRect(0, 0, 800, 600);
+    this.textObjects = [];
+    this.leaderboardTextObjects = [];
+    this.createUI();
 
-    // Create game over text
-    this.gameOverText = scene.add.text(400, 180, "GAME OVER", {
-      fontSize: "64px",
-      fontFamily: "Arial, sans-serif",
-      color: "#ff0000",
-      align: "center",
-    });
-    this.gameOverText.setOrigin(0.5);
-
-    // Create player 1 score text
-    this.score1Text = scene.add.text(400, 260, "Player 1: " + player1Score, {
-      fontSize: "28px",
-      fontFamily: "Arial, sans-serif",
-      color: "#00ffff",
-      align: "center",
-    });
-    this.score1Text.setOrigin(0.5);
-
-    // Create player 2 score text
-    this.score2Text = scene.add.text(400, 300, "Player 2: " + player2Score, {
-      fontSize: "28px",
-      fontFamily: "Arial, sans-serif",
-      color: "#ffaa00",
-      align: "center",
-    });
-    this.score2Text.setOrigin(0.5);
-
-    const highScore = registerAndGetHighestScore(player1Score, player2Score);
-    this.highScoreText = scene.add.text(400, 340, "High Score: " + highScore, {
-      fontSize: "28px",
-      fontFamily: "Arial, sans-serif",
-      color: "#ffffff",
-      align: "center",
-    });
-    this.highScoreText.setOrigin(0.5);
-    this.highScoreText.setAlpha(0.5);
-
-    // Create reset button text
-    this.resetButtonText = scene.add.text(400, 420, "Press SPACE to Restart", {
-      fontSize: "32px",
-      fontFamily: "Arial, sans-serif",
-      color: "#ffffff",
-      align: "center",
-    });
-    this.resetButtonText.setOrigin(0.5);
     this.resetButtonTween = scene.tweens.add({
       targets: this.resetButtonText,
       alpha: { from: 0.2, to: 1 },
@@ -1243,7 +1230,294 @@ class GameOverScreen {
     });
   }
 
+  createUI() {
+    const scene = this.scene;
+
+    // Dark overlay
+    this.graphics.fillStyle(0x000000, 0.85);
+    this.graphics.fillRect(0, 0, 800, 600);
+
+    // Game Over title
+    this.gameOverText = scene.add.text(400, 120, "GAME OVER", {
+      fontSize: "48px",
+      fontFamily: "Arial, sans-serif",
+      color: "#ff0000",
+      align: "center",
+      fontStyle: "bold",
+    });
+    this.gameOverText.setOrigin(0.5);
+    this.textObjects.push(this.gameOverText);
+
+    // Player 1 section (left column)
+    const p1X = 250;
+    const p1Y = 200;
+
+    if (this.player1InLeaderboard) {
+      // Name input for P1
+      this.player1NameText = scene.add.text(
+        p1X,
+        p1Y,
+        this.getFormattedName(1),
+        {
+          fontSize: "32px",
+          fontFamily: "monospace",
+          color: `#${PLAYER1_COLOR.toString(16).padStart(6, "0")}`,
+          align: "center",
+        }
+      );
+      this.player1NameText.setOrigin(0.5);
+      this.textObjects.push(this.player1NameText);
+    }
+
+    // P1 Score
+    this.player1ScoreText = scene.add.text(
+      p1X,
+      p1Y + 40,
+      `P1: ${this.player1Score}`,
+      {
+        fontSize: "24px",
+        fontFamily: "Arial, sans-serif",
+        color: `#${PLAYER1_COLOR.toString(16).padStart(6, "0")}`,
+        align: "center",
+      }
+    );
+    this.player1ScoreText.setOrigin(0.5);
+    this.textObjects.push(this.player1ScoreText);
+
+    // Player 2 section (right column)
+    const p2X = 550;
+    const p2Y = p1Y;
+
+    if (this.player2InLeaderboard) {
+      // Name input for P2
+      this.player2NameText = scene.add.text(
+        p2X,
+        p2Y,
+        this.getFormattedName(2),
+        {
+          fontSize: "32px",
+          fontFamily: "monospace",
+          color: `#${PLAYER2_COLOR.toString(16).padStart(6, "0")}`,
+          align: "center",
+        }
+      );
+      this.player2NameText.setOrigin(0.5);
+      this.textObjects.push(this.player2NameText);
+    }
+
+    // P2 Score
+    this.player2ScoreText = scene.add.text(
+      p2X,
+      p2Y + 40,
+      `P2: ${this.player2Score}`,
+      {
+        fontSize: "24px",
+        fontFamily: "Arial, sans-serif",
+        color: `#${PLAYER2_COLOR.toString(16).padStart(6, "0")}`,
+        align: "center",
+      }
+    );
+    this.player2ScoreText.setOrigin(0.5);
+    this.textObjects.push(this.player2ScoreText);
+
+    // Top 10 section
+    const leaderboardY = 250;
+
+    // Render leaderboard in 2 columns
+    this.renderLeaderboard(leaderboardY + 35);
+
+    // Restart button
+    this.resetButtonText = scene.add.text(400, 450, "Press SPACE to Restart", {
+      fontSize: "24px",
+      fontFamily: "Arial, sans-serif",
+      color: "#ffffff",
+      align: "center",
+    });
+    this.resetButtonText.setOrigin(0.5);
+    this.textObjects.push(this.resetButtonText);
+  }
+
+  renderLeaderboard(startY) {
+    const leaderboard = getLeaderboard();
+    const leftX = 160;
+    const rightX = 460;
+    const lineHeight = 24;
+
+    for (let i = 0; i < 10; i++) {
+      const entry = leaderboard[i];
+      const rank = i + 1;
+      const isLeftColumn = i < 5;
+      const x = isLeftColumn ? leftX : rightX;
+      const y = startY + (isLeftColumn ? i : i - 5) * lineHeight;
+
+      const rankPrefix = rank.toString().padStart(2, " ");
+
+      if (entry) {
+        // Determine color based on whether this is from the last game
+        let color = "#cccccc";
+        if (entry.id === this.player1Id) {
+          color = `#${PLAYER1_COLOR.toString(16).padStart(6, "0")}`;
+        } else if (entry.id === this.player2Id) {
+          color = `#${PLAYER2_COLOR.toString(16).padStart(6, "0")}`;
+        }
+
+        const text = `${rankPrefix}. ${
+          entry.name === "   " ? "???" : entry.name
+        } - ${entry.score}`;
+        const entryText = this.scene.add.text(x, y, text, {
+          fontSize: "18px",
+          fontFamily: "monospace",
+          color: color,
+          align: "left",
+        });
+        this.leaderboardTextObjects.push(entryText);
+      } else {
+        const text = `${rankPrefix}. --- - 0`;
+        const entryText = this.scene.add.text(x, y, text, {
+          fontSize: "18px",
+          fontFamily: "monospace",
+          color: "#444444",
+          align: "left",
+        });
+        this.leaderboardTextObjects.push(entryText);
+      }
+    }
+  }
+
+  updateLeaderboard() {
+    // Clear existing leaderboard text objects
+    for (const textObj of this.leaderboardTextObjects) {
+      textObj.destroy();
+    }
+    this.leaderboardTextObjects = [];
+
+    // Re-render the leaderboard
+    const leaderboardY = 250;
+    this.renderLeaderboard(leaderboardY + 35);
+  }
+
+  getFormattedName(player) {
+    const name = player === 1 ? this.player1Name : this.player2Name;
+    const pos = player === 1 ? this.player1CharPos : this.player2CharPos;
+
+    // Format with brackets to show current position
+    // Replace spaces with underscores for display
+    let formatted = "";
+    for (let i = 0; i < 3; i++) {
+      const displayChar = name[i] === " " ? "_" : name[i];
+      if (i === pos) {
+        formatted += `[${displayChar}]`;
+      } else {
+        formatted += ` ${displayChar} `;
+      }
+    }
+    return formatted;
+  }
+
+  cycleCharacter(player, direction) {
+    const name = player === 1 ? this.player1Name : this.player2Name;
+    const pos = player === 1 ? this.player1CharPos : this.player2CharPos;
+
+    // Get current character code (space=32, A=65, Z=90)
+    let charCode = name[pos].charCodeAt(0);
+
+    // If current char is not in range, default to space
+    if (charCode < 32 || (charCode > 32 && charCode < 65) || charCode > 90) {
+      charCode = 32;
+    }
+
+    // Move to next/previous character
+    if (direction > 0) {
+      // Moving forward: space -> A -> ... -> Z -> space
+      if (charCode === 32) {
+        charCode = 65; // space -> A
+      } else if (charCode === 90) {
+        charCode = 32; // Z -> space
+      } else {
+        charCode += 1; // A -> B -> ... -> Z
+      }
+    } else {
+      // Moving backward: space -> Z -> ... -> A -> space
+      if (charCode === 32) {
+        charCode = 90; // space -> Z
+      } else if (charCode === 65) {
+        charCode = 32; // A -> space
+      } else {
+        charCode -= 1; // Z -> Y -> ... -> A
+      }
+    }
+
+    name[pos] = String.fromCharCode(charCode);
+
+    // Update leaderboard immediately
+    const id = player === 1 ? this.player1Id : this.player2Id;
+    const fullName = name.join("");
+    updateLeaderboardName(id, fullName);
+
+    // Update global saved names
+    if (player === 1) {
+      lastPlayer1Name = fullName;
+    } else {
+      lastPlayer2Name = fullName;
+    }
+
+    // Update display
+    this.updateNameDisplay(player);
+    this.updateLeaderboard();
+  }
+
+  moveToNextPosition(player) {
+    if (player === 1) {
+      this.player1CharPos = (this.player1CharPos + 1) % 3;
+    } else {
+      this.player2CharPos = (this.player2CharPos + 1) % 3;
+    }
+    this.updateNameDisplay(player);
+  }
+
+  updateNameDisplay(player) {
+    if (player === 1 && this.player1NameText) {
+      this.player1NameText.setText(this.getFormattedName(1));
+    } else if (player === 2 && this.player2NameText) {
+      this.player2NameText.setText(this.getFormattedName(2));
+    }
+  }
+
   update(time, delta, keys) {
+    // Handle Player 1 name input (only if in leaderboard)
+    if (this.player1InLeaderboard) {
+      // W/S to cycle characters
+      if (keys.player1.up.isDown && time - this.lastP1UpDown > 150) {
+        this.cycleCharacter(1, 1);
+        this.lastP1UpDown = time;
+      } else if (keys.player1.down.isDown && time - this.lastP1UpDown > 150) {
+        this.cycleCharacter(1, -1);
+        this.lastP1UpDown = time;
+      }
+
+      // V to move to next position
+      if (Phaser.Input.Keyboard.JustDown(keys.player1.dash)) {
+        this.moveToNextPosition(1);
+      }
+    }
+
+    // Handle Player 2 name input (only if in leaderboard)
+    if (this.player2InLeaderboard) {
+      // Up/Down to cycle characters
+      if (keys.player2.up.isDown && time - this.lastP2UpDown > 150) {
+        this.cycleCharacter(2, 1);
+        this.lastP2UpDown = time;
+      } else if (keys.player2.down.isDown && time - this.lastP2UpDown > 150) {
+        this.cycleCharacter(2, -1);
+        this.lastP2UpDown = time;
+      }
+
+      // K to move to next position
+      if (Phaser.Input.Keyboard.JustDown(keys.player2.dash)) {
+        this.moveToNextPosition(2);
+      }
+    }
+
     // Check if player wants to start a new game
     if (Phaser.Input.Keyboard.JustDown(keys.startKey)) {
       return new GameScreen(this.scene);
@@ -1253,11 +1527,12 @@ class GameOverScreen {
 
   destroy() {
     this.graphics.destroy();
-    this.gameOverText.destroy();
-    this.score1Text.destroy();
-    this.score2Text.destroy();
-    this.resetButtonText.destroy();
-    this.highScoreText.destroy();
+    for (const textObj of this.textObjects) {
+      textObj.destroy();
+    }
+    for (const textObj of this.leaderboardTextObjects) {
+      textObj.destroy();
+    }
     this.resetButtonTween.destroy();
   }
 }
@@ -1651,7 +1926,7 @@ class GameScreen {
 const backupLocalStorage = new Map();
 function getStorage() {
   try {
-    localStorage.getItem("--close-corners-highScore");
+    localStorage.getItem("--close-corners-leaderboard");
     return localStorage;
   } catch {
     return {
@@ -1661,15 +1936,42 @@ function getStorage() {
   }
 }
 
-function getHighestScore() {
-  const score = getStorage().getItem("--close-corners-highScore");
-  return score ? Number.parseInt(score, 10) : 0;
+function getLeaderboard() {
+  const data = getStorage().getItem("--close-corners-leaderboard");
+  if (!data) return [];
+  try {
+    const leaderboard = JSON.parse(data);
+    return leaderboard.sort((a, b) => b.score - a.score).slice(0, 10);
+  } catch {
+    return [];
+  }
 }
 
-function registerAndGetHighestScore(...scores) {
-  const highScore = Math.max(...scores, getHighestScore());
-  getStorage().setItem("--close-corners-highScore", highScore.toString());
-  return highScore;
+function addScoreToLeaderboard(score, name, id) {
+  const leaderboard = getLeaderboard();
+  leaderboard.push({ id, score, name });
+
+  leaderboard.sort((a, b) => {
+    const diff = b.score - a.score;
+    if (diff !== 0) return diff;
+    return -a.id.localeCompare(b.id);
+  });
+
+  const top10 = leaderboard.slice(0, 10);
+  getStorage().setItem("--close-corners-leaderboard", JSON.stringify(top10));
+  return top10.findIndex((entry) => entry.id === id) !== -1;
+}
+
+function updateLeaderboardName(id, name) {
+  const leaderboard = getLeaderboard();
+  const entry = leaderboard.find((e) => e.id === id);
+  if (entry) {
+    entry.name = name;
+    getStorage().setItem(
+      "--close-corners-leaderboard",
+      JSON.stringify(leaderboard)
+    );
+  }
 }
 
 // ========== HELPERS ==========
@@ -1842,10 +2144,15 @@ let keys;
 let audioSystem;
 let crtPipelineRegistered = false;
 
+// Global variables to store last used names
+let lastPlayer1Name = "   ";
+let lastPlayer2Name = "   ";
+
 function create() {
   audioSystem = new AudioSystem(this);
 
   currentScreen = new TitleScreen(this);
+  // currentScreen = new GameOverScreen(this, 0, 0);
 
   keys = {
     player1: {
