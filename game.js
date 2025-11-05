@@ -6,6 +6,79 @@ const PADDING_X = 90;
 const PADDING_Y = 75;
 const BACKGROUND_COLOR = "#000000";
 
+// =============================================================================
+// ARCADE BUTTON MAPPING - COMPLETE TEMPLATE
+// =============================================================================
+// Reference: See button-layout.webp at hack.platan.us/assets/images/arcade/
+//
+// Maps arcade button codes to keyboard keys for local testing.
+// Each arcade code can map to multiple keyboard keys (array values).
+// The arcade cabinet sends codes like 'P1U', 'P1A', etc. when buttons are pressed.
+//
+// To use in your game:
+//   if (key === 'P1U') { ... }  // Works on both arcade and local (via keyboard)
+//
+// CURRENT GAME USAGE (Snake):
+//   - P1U/P1D/P1L/P1R (Joystick) → Snake Direction
+//   - P1A (Button A) or START1 (Start Button) → Restart Game
+// =============================================================================
+
+const ARCADE_CONTROLS = {
+  // ===== PLAYER 1 CONTROLS =====
+  // Joystick - Left hand on WASD
+  P1U: ["w"],
+  P1D: ["s"],
+  P1L: ["a"],
+  P1R: ["d"],
+  P1DL: null, // Diagonal down-left (no keyboard default)
+  P1DR: null, // Diagonal down-right (no keyboard default)
+
+  // Action Buttons - Right hand on home row area (ergonomic!)
+  // Top row (ABC): U, I, O  |  Bottom row (XYZ): J, K, L
+  P1A: ["u"],
+  P1B: ["i"],
+  P1C: ["o"],
+  P1X: ["j"],
+  P1Y: ["k"],
+  P1Z: ["l"],
+
+  // Start Button
+  START1: ["1", "Enter"],
+
+  // ===== PLAYER 2 CONTROLS =====
+  // Joystick - Right hand on Arrow Keys
+  P2U: ["ArrowUp"],
+  P2D: ["ArrowDown"],
+  P2L: ["ArrowLeft"],
+  P2R: ["ArrowRight"],
+  P2DL: null, // Diagonal down-left (no keyboard default)
+  P2DR: null, // Diagonal down-right (no keyboard default)
+
+  // Action Buttons - Left hand (avoiding P1's WASD keys)
+  // Top row (ABC): R, T, Y  |  Bottom row (XYZ): F, G, H
+  P2A: ["r"],
+  P2B: ["t"],
+  P2C: ["y"],
+  P2X: ["f"],
+  P2Y: ["g"],
+  P2Z: ["h"],
+
+  // Start Button
+  START2: ["2"],
+};
+
+// Build reverse lookup: keyboard key → arcade button code
+const KEYBOARD_TO_ARCADE = {};
+for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
+  if (keyboardKeys) {
+    // Handle both array and single value
+    const keys = Array.isArray(keyboardKeys) ? keyboardKeys : [keyboardKeys];
+    keys.forEach((key) => {
+      KEYBOARD_TO_ARCADE[key] = arcadeCode;
+    });
+  }
+}
+
 const config = {
   type: Phaser.AUTO,
   width: WIDTH,
@@ -192,6 +265,7 @@ class EnemySpawner {
         ...enemy,
         count: currentEnemies.filter((e) => e instanceof enemy.enemyClass)
           .length,
+        xe,
       }))
       .filter((enemy) => enemy.maxAmountOnScreen > enemy.count)
       .map((enemy) => ({
