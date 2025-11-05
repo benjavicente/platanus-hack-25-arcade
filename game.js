@@ -79,6 +79,36 @@ for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
   }
 }
 
+// Helper function to convert keyboard key string to Phaser KeyCode
+function getKeyCode(keyString) {
+  const keyMap = {
+    w: Phaser.Input.Keyboard.KeyCodes.W,
+    a: Phaser.Input.Keyboard.KeyCodes.A,
+    s: Phaser.Input.Keyboard.KeyCodes.S,
+    d: Phaser.Input.Keyboard.KeyCodes.D,
+    u: Phaser.Input.Keyboard.KeyCodes.U,
+    i: Phaser.Input.Keyboard.KeyCodes.I,
+    o: Phaser.Input.Keyboard.KeyCodes.O,
+    j: Phaser.Input.Keyboard.KeyCodes.J,
+    k: Phaser.Input.Keyboard.KeyCodes.K,
+    l: Phaser.Input.Keyboard.KeyCodes.L,
+    r: Phaser.Input.Keyboard.KeyCodes.R,
+    t: Phaser.Input.Keyboard.KeyCodes.T,
+    y: Phaser.Input.Keyboard.KeyCodes.Y,
+    f: Phaser.Input.Keyboard.KeyCodes.F,
+    g: Phaser.Input.Keyboard.KeyCodes.G,
+    h: Phaser.Input.Keyboard.KeyCodes.H,
+    1: Phaser.Input.Keyboard.KeyCodes.ONE,
+    2: Phaser.Input.Keyboard.KeyCodes.TWO,
+    ArrowUp: Phaser.Input.Keyboard.KeyCodes.UP,
+    ArrowDown: Phaser.Input.Keyboard.KeyCodes.DOWN,
+    ArrowLeft: Phaser.Input.Keyboard.KeyCodes.LEFT,
+    ArrowRight: Phaser.Input.Keyboard.KeyCodes.RIGHT,
+    Enter: Phaser.Input.Keyboard.KeyCodes.ENTER,
+  };
+  return keyMap[keyString];
+}
+
 const config = {
   type: Phaser.AUTO,
   width: WIDTH,
@@ -265,7 +295,6 @@ class EnemySpawner {
         ...enemy,
         count: currentEnemies.filter((e) => e instanceof enemy.enemyClass)
           .length,
-        xe,
       }))
       .filter((enemy) => enemy.maxAmountOnScreen > enemy.count)
       .map((enemy) => ({
@@ -1172,7 +1201,7 @@ class TitleScreen {
     });
     this.titleText.setOrigin(0.5);
 
-    this.promptText = scene.add.text(400, 340, "Press SPACE to begin", {
+    this.promptText = scene.add.text(400, 340, "Press 1 or Enter to begin", {
       fontSize: "28px",
       fontFamily: "Arial, sans-serif",
       color: "#ffffff",
@@ -1197,7 +1226,7 @@ class TitleScreen {
     this.controlsTextP1 = scene.add.text(
       250,
       500,
-      "P1: WASD + V dash + C flash",
+      "P1: WASD + L dash + K flash",
       {
         fontSize: "18px",
         fontFamily: "Arial, sans-serif",
@@ -1209,7 +1238,7 @@ class TitleScreen {
     this.controlsTextP2 = scene.add.text(
       550,
       500,
-      "P2: Arrows + K dash + L flash",
+      "P2: Arrows + H dash + G flash",
       {
         fontSize: "18px",
         fontFamily: "Arial, sans-serif",
@@ -1229,7 +1258,8 @@ class TitleScreen {
   }
 
   update(time, delta, keys) {
-    if (Phaser.Input.Keyboard.JustDown(keys.startKey)) {
+    // Check if any START1 button is pressed
+    if (keys.startKeys.some((key) => Phaser.Input.Keyboard.JustDown(key))) {
       return new GameScreen(this.scene);
     }
     return null;
@@ -1401,12 +1431,17 @@ class GameOverScreen {
     this.renderLeaderboard(leaderboardY + 35);
 
     // Restart button
-    this.resetButtonText = scene.add.text(400, 450, "Press SPACE to Restart", {
-      fontSize: "24px",
-      fontFamily: "Arial, sans-serif",
-      color: "#ffffff",
-      align: "center",
-    });
+    this.resetButtonText = scene.add.text(
+      400,
+      450,
+      "Press 1 or Enter to Restart",
+      {
+        fontSize: "24px",
+        fontFamily: "Arial, sans-serif",
+        color: "#ffffff",
+        align: "center",
+      }
+    );
     this.resetButtonText.setOrigin(0.5);
     this.textObjects.push(this.resetButtonText);
   }
@@ -1592,8 +1627,8 @@ class GameOverScreen {
       }
     }
 
-    // Check if player wants to start a new game
-    if (Phaser.Input.Keyboard.JustDown(keys.startKey)) {
+    // Check if player wants to start a new game (any START1 button)
+    if (keys.startKeys.some((key) => Phaser.Input.Keyboard.JustDown(key))) {
       return new GameScreen(this.scene);
     }
     return null;
@@ -1902,7 +1937,7 @@ class GameScreen {
     this.timeText.setText(minutes + ":" + seconds.toString().padStart(2, "0"));
 
     if (!this.gameOver) {
-      // Handle player 1 input (WASD + C for dash + V for flash)
+      // Handle player 1 input (WASD + L for dash + K for flash)
       if (this.players[0].hearts > 0) {
         this.players[0].updateMovement(
           keys.player1,
@@ -1920,7 +1955,7 @@ class GameScreen {
         }
       }
 
-      // Handle player 2 input (Arrow keys + K for dash + L for flash)
+      // Handle player 2 input (Arrow keys + H for dash + G for flash)
       if (this.players[1].hearts > 0) {
         this.players[1].updateMovement(
           keys.player2,
@@ -2228,26 +2263,28 @@ function create() {
   currentScreen = new TitleScreen(this);
   // currentScreen = new GameOverScreen(this, 0, 0);
 
+  // Setup keys using ARCADE_CONTROLS mapping
   keys = {
     player1: {
-      left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-      right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
-      up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-      down: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-      flash: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C),
-      dash: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.V),
+      left: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P1L[0])),
+      right: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P1R[0])),
+      up: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P1U[0])),
+      down: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P1D[0])),
+      flash: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P1Y[0])),
+      dash: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P1Z[0])),
     },
-    player2: this.input.keyboard.createCursorKeys(),
-    startKey: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
+    player2: {
+      left: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P2L[0])),
+      right: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P2R[0])),
+      up: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P2U[0])),
+      down: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P2D[0])),
+      flash: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P2Y[0])),
+      dash: this.input.keyboard.addKey(getKeyCode(ARCADE_CONTROLS.P2Z[0])),
+    },
+    startKeys: ARCADE_CONTROLS.START1.map((key) =>
+      this.input.keyboard.addKey(getKeyCode(key))
+    ),
   };
-
-  // Add dash and flash keys for player 2
-  keys.player2.dash = this.input.keyboard.addKey(
-    Phaser.Input.Keyboard.KeyCodes.K
-  );
-  keys.player2.flash = this.input.keyboard.addKey(
-    Phaser.Input.Keyboard.KeyCodes.L
-  );
 
   if (this.game.renderer instanceof Phaser.Renderer.WebGL.WebGLRenderer) {
     const pipelineManager = this.game.renderer.pipelines;
